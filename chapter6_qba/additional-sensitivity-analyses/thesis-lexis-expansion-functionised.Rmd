@@ -55,6 +55,9 @@ act_vars_z <-
   zCompositions::lrEM(act_vars, label = 0, rep(rep_val, length.out = 4))
 colnames(act_vars_z) <- rot_list[[1]]
 
+# Need columns formatted as numeric 
+df$age_entry <- as.double(df$age_entry)
+df$age_exit <- as.double(df$age_exit)
 
 # Calculate (3 time periods) =========================================================
 tp_vec <- c("0-2 years" = 0, "2-4 years" = 2, "4+ years" = 4)

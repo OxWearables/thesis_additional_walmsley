@@ -1,8 +1,8 @@
 
 source("../../useful_functions/consistent_theme.R")
 
-prep_record <- function(tp_vec, rot_list, i){
-  rec_dat <- data.frame(matrix(nrow = (length(tp_vec)+1)*length(rot_list[[i]]), ncol = 7))
+prep_record <- function(tp_vec, rot_list){
+  rec_dat <- data.frame(matrix(nrow = (length(tp_vec)+1)*length(rot_list[[1]]), ncol = 7))
   colnames(rec_dat) <- c("Behaviour",
                                  "Difference",
                                  "TimePeriod",
@@ -40,13 +40,12 @@ get_ilr_diff <- function(cm, diff, comp_name){
 
 produce_tp_plot <- function(tp_vec, rot_list, cm, act_vars_z, df){
  
-
+  rec_dat <- prep_record(tp_vec, rot_list)
 
   for (i in 1:length(rot_list)) {
     # set up
     comp_labels <- rot_list[[i]]
     comp_name <- names(rot_list)[i]
-    rec_dat <- prep_record(tp_vec, rot_list, i)
     
     # set up for later looking at transformation
     if (comp_name == "MVPA") {
@@ -204,9 +203,9 @@ produce_tp_plot <- function(tp_vec, rot_list, cm, act_vars_z, df){
 
   ## save plot to file----------------------------------------------------------------------------------------------
   svg(
-    paste0("chapter6_qba/additional-sensitivity-analyses/plots/thesis-time-periods-", length(tp_vec), ".svg"),
+    paste0("plots/thesis-time-periods-", length(tp_vec), ".svg"), # chapter6_qba/additional-sensitivity-analyses
     width = 10,
-    height = 5
+    height = 6
   )
   print(p)
   dev.off()
