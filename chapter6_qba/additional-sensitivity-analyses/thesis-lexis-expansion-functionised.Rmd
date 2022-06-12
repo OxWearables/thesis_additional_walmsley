@@ -1,0 +1,98 @@
+---
+title: "Analyses by time period of follow-up"
+author: "R-Walmsley"
+date: "29/03/2022"
+output: html_document
+---
+
+# Set up
+```{r}
+name_of_current_run <- "2021-06-17check_messages" # use data from an old run
+```
+
+# Load libraries
+```{r}
+library(robCompositions)
+library(survival)
+library(epicoda)
+library(Epi)
+library(ggplot2)
+```
+
+# Source functions 
+```{r}
+source("thesis-lexis-expansion-functionised.R")
+```
+
+# Name where data is
+```{r}
+input_loc <- "../../../../paperRW2021/"
+```
+
+# Load data 
+```{r}
+df <-  readRDS(paste0(
+  input_loc, "epiAnalysis/inputData/",
+  name_of_current_run,
+  "_ready_to_use.RDS"
+))
+```
+
+# Set up transformation
+
+```{r}
+rot_list <- list(
+  "sleep" = c("sleep", "SB", "LIPA", "MVPA"),
+  "SB" = c("SB", "sleep", "LIPA", "MVPA"),
+ "LIPA" = c("LIPA", "sleep", "SB",  "MVPA"),
+ "MVPA" = c("MVPA", "sleep", "SB", "LIPA")
+)
+
+cm <- comp_mean(df, rot_list[[1]])
+act_vars <- as.matrix(df[, rot_list[[1]]])
+rep_val <- min(act_vars[act_vars != 0])
+act_vars_z <-
+  zCompositions::lrEM(act_vars, label = 0, rep(rep_val, length.out = 4))
+colnames(act_vars_z) <- rot_list[[1]]
+
+
+# Calculate (3 time periods) =========================================================
+tp_vec <- c("0-2 years" = 0, "2-4 years" = 2, "4+ years" = 4)
+produce_tp_plot(tp_vec, rot_list, cm, act_vars_z, df)
+
+
+# Calculate  (2 time periods)
+tp_vec <- c("0-3 years" = 0, "3+ years" = 3)
+rd <- produce_tp_plot(tp_vec, rot_list, cm, act_vars_z, df)
+
+```
+
+
+
+
+# OLD STUFF
+```{r}
+## Some visual checks and returned values--------------------------------------------------
+# Visually inspect spl to check it's worked correctly (when did not sit in function)
+lexcols <- colnames(spl)[1:7]
+key <-
+  spl[, c(
+    lexcols,
+    "CVD_event",
+    "age_entry",
+    "age_exit",
+    "accel_date",
+    "time_in_study",
+    "time_period"
+  )]
+
+
+# Calculate a sensible split of time
+tos <- df$time_in_study[df$CVD_event == 1]
+length(tos)
+hist(tos)
+quantile(tos, c(0, 0.3333, 0.5, 0.6666, 1))/365.25
+length(tos[tos < 365.25*2])
+length(tos[tos >= 365.25*2 & (tos <365.25*4)])
+length(tos[tos >= 365.25*4])
+```
