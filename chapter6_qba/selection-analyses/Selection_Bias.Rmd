@@ -47,6 +47,18 @@ vars_biom_tab_only <- c( "Systolic_blood_pressure",
 var_list_minus_age <- c(vars_orig, vars_health_orig, vars_sr_act, vars_biom_tab_only)
 ```
 
+# Deal with job status 
+```{r}
+emp_status <- rep(NA, times = nrow(df_other))
+emp_status[grepl("In paid employment or self-employed", df_other$employed_i0)] <- "Employed"
+emp_status[!grepl("In paid employment or self-employed", df_other$employed_i0) & (grepl( "Retired|Looking after home and/or family|Unemployed|Unable to work because of sickness or disability|Doing unpaid or voluntary work|Full or part-time student", df_other$employed_i0))] <- "Not_employed"
+emp_status[!(emp_status %in% c("Employed", "Not_employed"))] <- NA
+
+for (var in vars_sr_act[3:4]){
+  df_other[, var][emp_status == "Not_employed"] <- "Not_in_employment"
+  }
+```
+
 # Merge additional columns into df_all
 ```{r}
 df_all <- merge(df_all, df_other[,c(
@@ -80,8 +92,8 @@ for (var in c("baseline_age", var_list_minus_age)){
   }
   if (var %in% c("baseline_age", "BMI", "TownsendDeprIndexRecruit", vars_biom_tab_only, vars_sr_act[c(1, 2)])){
     print(hist(as.numeric(df_all[, var]), main = var))
-    print(hist(log(as.numeric(df_all[, var] + .1)), main = paste0("log(x+1)" , var)))
-    df_all[, paste0("log_", var)] <- log(as.numeric(df_all[, var] + .1))
+    print(hist(log(as.numeric(df_all[, var]) + .1), main = paste0("log(x+1)" , var)))
+    df_all[, paste0("log_", var)] <- log(as.numeric(df_all[, var]) + .1)
   }
 }
 df_all$baseline_age_ten_years <- as.double(df_all$baseline_age)/(365.25*10)
@@ -138,7 +150,7 @@ print(Sys.time())
 ```
 
 Model in whole dataset: 
-```{r, eval=FALSE}
+```{r}
 # Do model in whole dataset
 log_inc <-
   with(
@@ -159,24 +171,18 @@ pool_model <- pool(log_inc)
 
 summary(pool_model)
 
-# Note this is only needed if we want to grab coefficients from this to present later... 
-
-# THIS IS WHERE WE NEED MICE
-# mod_confint_log_odds <- confint(log_inc)
-# mod_confint <- as.data.frame(exp(mod_confint_log_odds))
-# mod_coef <- as.data.frame(exp(coefficients(log_inc)))
-# tab_wt_model <- cbind(mod_coef, mod_confint)
-# tab_wt_model_f <-
-#   format(round(tab_wt_model, digits = 2), nsmall = 2)
-# tab_wt_model_new <- data.frame(ncol)
-# t <-
-#   knitr::kable(
-#     tab_wt_model_f,
-#     format = "latex",
-#     booktabs = TRUE,
-#     longtable = TRUE
-#   )
-# write(t, "plots/table-weight-model.tex")
+# Grab coefficients
+mod_coef <- summary(pool_model, conf.int = TRUE, exponentiate = TRUE)[, c("term", "estimate", "2.5 %", "97.5 %")]
+tab_wt_model_f <- cbind(mod_coef[, 1, drop = FALSE], format(round(mod_coef[, 2:4], digits = 2), nsmall = 2))
+tab_wt_model_f$`OR (CI)` <- paste0(tab_wt_model_f[, 2], " (", tab_wt_model_f[, 3], ", ", tab_wt_model_f[, 4], ")")
+t <-
+   knitr::kable(
+     tab_wt_model_f[, c("term", "OR (CI)")],
+     format = "latex",
+     booktabs = TRUE,
+     longtable = TRUE
+ )
+ write(t, "plots/table-weight-model.tex")
 ```
 
 Do logistic regression model in each imputed dataset:
@@ -537,6 +543,7 @@ Looking at % change in coef:
 cs <- cox_mod_simple$coefficients
 cw <- cox_mod_weighted$coefficients
 print(100*(cw-cs)/cs)
+print(cw-cs)
 
 exp(cs[["ethnicityBlack"]])
 exp(cw[["ethnicityBlack"]])
