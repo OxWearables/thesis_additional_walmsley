@@ -596,3 +596,40 @@ svg(
 print(p)
 dev.off()
 ```
+
+Plotting without evals: 
+```{r}
+p <- # DATA AND AESTHETICS
+  ggplot(data = rec_dat_basic[2:5, ],
+            aes(
+              x = HR,
+              y = BehaviourDet,
+              label = label
+            )) +
+  # GEOMS
+  geom_pointrange(position = position_dodge(0.6), aes(xmin = LowerCI, xmax = UpperCI), size = 1, shape = 18) +
+  geom_text(
+    size = 4.5,
+    aes(x = 1.15, y = BehaviourDet, label = label),
+    position = position_dodge(0.6),
+    colour = "black", 
+    fontface = "bold", 
+    hjust = 0) +
+  geom_vline(xintercept = 1, size = 0.75) +
+
+  # SCALES
+  scale_x_continuous(trans = "log10", breaks = c(0.9, 0.95, 1, 1.05)) +
+
+  # CONSISTENT THEME 
+  consistent_theme
+
+## save plot to file----------------------------------------------------------------------------------------------
+svg(
+  "plots/thesis-master-plot.svg",
+  width = 10,
+  height = 5
+)
+print(p)
+dev.off()
+```
+```
