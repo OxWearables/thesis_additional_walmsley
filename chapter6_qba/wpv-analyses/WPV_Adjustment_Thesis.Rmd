@@ -28,12 +28,16 @@ library(knitr)
 
 # Prepare functions for use in adjustment 
 ```{r message=FALSE, results='hide'}
-# knitr::knit('../Analysis/Adjustment_Functions.Rmd', tangle=TRUE)
 fl <- list.files(file_loc)
 for (file in fl){
   try(source(paste0(file_loc, file)))
 }
 # Sourcing functions from another project - to be replaced with install_github
+```
+
+# Load theme
+```{r}
+source("../../useful_functions/consistent_theme.R")
 ```
 
 # Read in data 
@@ -421,7 +425,7 @@ for (var in names(rot_list)) {
     c(paste0(var, "_pivot1"), summary(cox_basic)$conf.int[1, c(1, 3:4)])
   
   # Make all predictive models
-  ## XXX NOTE: C
+  ## XXX NOTE: Change to precision weighting?? 
   models_list <- calc_models_multi(
     var_names = form_vars,
     data = df_rm,
@@ -663,6 +667,7 @@ for (var in c("HR", "LowerCI", "UpperCI")) {
 
 rdc <- rec_dat # This just saves the df so it's not a pain to get back if needed
 
+
 ## Make forest plot --------------------------------------------------------------
 
 ### This part is admin for labels etc --------------------------------------------
@@ -687,11 +692,11 @@ rec_dat$BehaviourDet <- plyr::revalue(
     "sleep" = "Sleep (extra 1 hr/day)"
   )
 )
-
+rec_dat$Model[rec_dat$Model == "measurement_adjusted"] <- "measurement-adjusted"
 rec_dat$Model <-
   factor(rec_dat$Model,
          ordered = TRUE,
-         c( "measurement_adjusted", "original"))
+         c( "measurement-adjusted", "original"))
 my_cols <- c("darkred", "black" )
 
 ### Make plot----------------------------------------------------------------------
