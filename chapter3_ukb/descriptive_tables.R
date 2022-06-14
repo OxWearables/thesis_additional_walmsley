@@ -89,7 +89,8 @@ fields <-
     "triglycerides" = 30870,
     "ldl" = 30780,
     "HbA1c" = 30750,
-    "sr_health" = 2178
+    "sr_health" = 2178, 
+    "employed" = 6142
   )
 
 for (i in 1:length(fields)) {
