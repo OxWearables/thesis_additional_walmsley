@@ -17,7 +17,7 @@
 
 # SETUP
 # Run name ===================
-run_name <- "_20220606"
+run_name <- "_20220614"
 
 ## Packages ===================
 #library(xtable) xtable and table1 cannot be loaded at the same time
@@ -90,7 +90,9 @@ fields <-
     "ldl" = 30780,
     "HbA1c" = 30750,
     "sr_health" = 2178, 
-    "employed" = 6142
+    "employed" = 6142, 
+    "sr_any_mpa_days" = 884, 
+    "sr_any_vpa_days"= 904 
   )
 
 for (i in 1:length(fields)) {
@@ -314,6 +316,8 @@ df$Self_reported_MPA <- df$sr_mpa_i0
 df$Self_reported_VPA <- df$sr_vpa_i0
 df$Job_involves_activity <- df$job_activity_i0
 df$Job_involves_walking_standing <- df$job_walk_stand_i0
+df$Self_reported_MPA[df$sr_any_mpa_days_i0 == "0"] <- 0
+df$Self_reported_VPA[df$sr_any_vpa_days_i0 == "0"] <- 0
 
 # Baseline vals
 df$BMI <- df$bmi_i0
