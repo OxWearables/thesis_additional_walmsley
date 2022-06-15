@@ -92,8 +92,13 @@ for (var in c("baseline_age", var_list_minus_age)){
   }
   if (var %in% c("baseline_age", "BMI", "TownsendDeprIndexRecruit", vars_biom_tab_only, vars_sr_act[c(1, 2)])){
     print(hist(as.numeric(df_all[, var]), main = var))
-    print(hist(log(as.numeric(df_all[, var]) + .1), main = paste0("log(x+1)" , var)))
-    df_all[, paste0("log_", var)] <- log(as.numeric(df_all[, var]) + .1)
+    print(hist(log(as.numeric(df_all[, var]) + .1), main = paste0("log(x+.1)" , var)))
+    print(min(as.numeric(df_all[, var])))
+    if (min(as.numeric(df_all[, var]), na.rm = TRUE) == 0){
+      df_all[, paste0("log_1plus_", var)] <- log(as.numeric(df_all[, var]) + 1)
+    } else {
+    df_all[, paste0("log_", var)] <- log(as.numeric(df_all[, var]))
+  }
   }
 }
 df_all$baseline_age_ten_years <- as.double(df_all$baseline_age)/(365.25*10)
@@ -121,8 +126,8 @@ var_list_imp <-
     "log_BMI",
     "poor_health",
     "meds",
-    "log_Self_reported_MPA",
-    "log_Self_reported_VPA",
+    "log_1plus_Self_reported_MPA",
+    "log_1plus_Self_reported_VPA",
     "Job_involves_walking_standing",
     "Job_involves_activity",
     "log_Systolic_blood_pressure",
@@ -159,7 +164,7 @@ log_inc <-
       in_analytic_sample ~ baseline_age_ten_years + sex + ethnicity + smoking +
         alcohol + fruit_and_veg_cats + red_and_processed_meat_cats + oily_fish +
         TownsendDeprIndexRecruit + education_cats + log_BMI + poor_health + meds +
-        log_Self_reported_MPA + log_Self_reported_VPA + Job_involves_walking_standing +
+        log_1plus_Self_reported_MPA + log_1plus_Self_reported_VPA + Job_involves_walking_standing +
         Job_involves_activity + log_Systolic_blood_pressure + log_HbA1c + log_C_Reactive_Protein +
         log_LDL_cholesterol + log_HDL_cholesterol + log_Triglycerides,
       family = binomial
@@ -197,7 +202,7 @@ for (i in 1:6){
     in_analytic_sample ~ baseline_age_ten_years + sex + ethnicity + smoking +
         alcohol + fruit_and_veg_cats + red_and_processed_meat_cats + oily_fish +
         TownsendDeprIndexRecruit + education_cats + log_BMI + poor_health + meds +
-        log_Self_reported_MPA + log_Self_reported_VPA + Job_involves_walking_standing +
+        log_1plus_Self_reported_MPA + log_1plus_Self_reported_VPA + Job_involves_walking_standing +
         Job_involves_activity + log_Systolic_blood_pressure + log_HbA1c + log_C_Reactive_Protein +
         log_LDL_cholesterol + log_HDL_cholesterol + log_Triglycerides,
     family = binomial, data = loc_dat)
@@ -313,7 +318,8 @@ my_render_cat <- function(x) {
          ))))
 }
 
-# CATEGORICAL RENDERER
+
+# CONTINUOUS RENDERER
 my_render_cont <- function(x){
   with(
     stats.apply.rounding(stats.default(x)),
