@@ -19,6 +19,7 @@ input_loc <- "../../../../paperRW2021/"
 lapply(c("ggplot2", "survival", "table1", "epicoda", "EValue"), library, character.only = TRUE) # Note version of epicoda: devtools::install_github("activityMonitoring/epicoda", ref = "fedd06114d664cfcd4087e6620b672e111f37ef0")
 source("../../useful_functions/round_2_dp.R")
 source("../../useful_functions/consistent_theme.R")
+source("thesis_interact_health_status.R")
 ```
 
 # Load data 
@@ -46,8 +47,10 @@ df_sensitivity <-
 
 # Also identify healthy and unhealthy subsets
 ```{r}
-df_healthy <- df[!(df$meds|df$poor_health|(df$any_previous_I_code ==1)), ]
-df_unhealthy <- df[(df$meds|df$poor_health|(df$any_previous_I_code ==1)), ]
+df$bad_health <- (df$meds|df$poor_health|(df$any_previous_I_code ==1))
+df_healthy <- df[!(df$bad_health), ]
+df_unhealthy <- df[df$bad_health, ]
+
 
 if (nrow(df_healthy) + nrow(df_unhealthy) != nrow(df)){
   stop("Error in identification of subsets")
@@ -92,6 +95,25 @@ rot_list <- list(
   "MVPA" = c("MVPA", "sleep", "SB", "LIPA")
 )
 
+```
+
+Testing for an interaction with health status: 
+```{r}
+# This bit just avoids on the fly zero imputation: 
+act_vars <- as.matrix(df[, rot_list[[1]]])
+rep_val <- min(act_vars[act_vars != 0])
+act_vars_z <-
+  zCompositions::lrEM(act_vars, label = 0, rep(rep_val, length.out = 4))
+colnames(act_vars_z) <- rot_list[[1]]
+
+# Actually run models with interctions
+interact_health_status(rot_list, act_vars_z, df)
+
+```
+
+
+Main modelling:
+```{r}
 cm <- epicoda::comp_mean(df, rot_list[[1]])
 
 # Calculate models =========================================================
