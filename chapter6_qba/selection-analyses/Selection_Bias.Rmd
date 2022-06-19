@@ -230,12 +230,12 @@ df_all$inverse_wt_stab <- selec_prob_all / df_all$selec_prob # Stabilisation
 df_in <-
   merge(df_in, df_all[, c("eid", "inverse_wt_stab", "selec_prob", vars_sr_act,  vars_biom_tab_only)], by = "eid")
 
-
+summary(df_all$inverse_wt_stab)
 # Stabilisation changes the effective population size
 # Before: 
 sum(1/df_in$selec_prob)
 # After:
-sum(1/df_in$inverse_wt_stab)
+sum(df_in$inverse_wt_stab)
 
 # Trim weights: 
 qt <- quantile(df_in$inverse_wt_stab, 0.99)

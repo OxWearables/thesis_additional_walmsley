@@ -33,7 +33,9 @@ source("useful_functions/round_2_dp.R")
 
 # READ DATA ===================
 df <-
-  data.frame(data.table::fread("data/thesis-phenoData-20220124.csv")) # this needs to be whole dataset and not only people in eventual sample. Redownload from DNANexus?
+  data.frame(data.table::fread("data/thesis-phenoData-20220124.csv")) 
+df2 <- data.frame(data.table::fread("data/data_vig_20220615.csv")) # This adds in 
+df <- merge(df, df2[, ], by = "eid")
 
 df_analysis <-
   readRDS(
