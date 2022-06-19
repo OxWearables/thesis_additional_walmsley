@@ -263,7 +263,7 @@ for (i in 0:4) {
     # Otherwise:
     else{
       quants <- quantile(dmin$temp, c(0.25, 0.5, 0.75))
-      if (grepl("VPA", var)) {
+      if (grepl("VPA|z1", var)) {
         qround <- round_2_dp(quants)
       }
       else{
