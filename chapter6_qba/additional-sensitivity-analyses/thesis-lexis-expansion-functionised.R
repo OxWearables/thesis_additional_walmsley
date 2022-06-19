@@ -120,6 +120,9 @@ produce_tp_plot <- function(tp_vec, rot_list, cm, act_vars_z, df){
 
       p_val_int <- anova(cox_mod_by_period, cox_mod_by_period_no_interact)$`P(>|Chi|)`[2]
       ci <- summary(cox_mod_by_period)$conf.int[, c(1, 3, 4)]
+      
+      print(summary(cox_mod_by_period))
+      
       HRs <- ci["piv1",] ^ ilr_diff
 
       tpname <- names(tp_vec)[tp_vec == as.numeric(ref)]
