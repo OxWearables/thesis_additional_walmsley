@@ -93,6 +93,7 @@ fields <-
     "HbA1c" = 30750,
     "sr_health" = 2178, 
     "employed" = 6142, 
+    "usual_walk_pace" = 924,
     "sr_any_mpa_days" = 884, 
     "sr_any_vpa_days"= 904 
   )
@@ -320,6 +321,7 @@ df$Job_involves_activity <- df$job_activity_i0
 df$Job_involves_walking_standing <- df$job_walk_stand_i0
 df$Self_reported_MPA[df$sr_any_mpa_days_i0 == "0"] <- 0
 df$Self_reported_VPA[df$sr_any_vpa_days_i0 == "0"] <- 0
+df$Self_reported_usual_walking_pace <- df$usual_walk_pace_i0
 
 # Baseline vals
 df$BMI <- df$bmi_i0
@@ -365,7 +367,8 @@ vars_sr_act <-
     "Self_reported_MPA",
     "Self_reported_VPA",
     "Job_involves_walking_standing",
-    "Job_involves_activity"
+    "Job_involves_activity", 
+    "Self_reported_usual_walking_pace"
   )
 vars_soc <-
   c("Qualifications", "Townsend_Deprivation_Index") # ADD THINGS TO DO WITH EMPLOYMENT
