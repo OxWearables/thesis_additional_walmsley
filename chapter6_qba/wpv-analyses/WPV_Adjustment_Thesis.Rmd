@@ -12,6 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 # Note location of input files
 ```{r}
 file_loc <- "../../../repeatedMeasurements/R/"
+file_loc_local <- "../../useful_functions/"
 input_loc <- "../../../../paperRW2021/"
 input_loc_rm <- "../../../repeatedMeasurementsStudy/"
 ```
@@ -35,13 +36,15 @@ for (file in fl){
 # Sourcing functions from another project - to be replaced with install_github
 ```
 
-# Load theme
-```{r}
-source("../../useful_functions/consistent_theme.R")
+# Load helpers
+```{r results = 'hide'}
+fl <- list.files(file_loc_local)
+for (file in fl){
+  try(source(paste0(file_loc_local, file)))
+}
 ```
 
 # Read in data 
-
 Read in main data:
 ```{r}
 # Prepped UKB data
@@ -71,11 +74,8 @@ df_rm$any_valid_repeat <- df_rm$in_s1 |
                                  df_rm$in_s4
 ```
 
-
 # Exclusions in repeated measures data
 ```{r}
-# Rep meas exclusions
-#---------------------
 n <- nrow(df_rm)
 exc_rm <-
   data.frame("Reason" = "Starting Number",
@@ -116,8 +116,7 @@ print(exc_rm)
 
 
 # Repeated measurements data prep
-
-- Add ilr transformed variables
+- Add ilr transformed variables:
 ```{r}
 rot_list <- list(
   "sleep" = c("sleep", "sedentary", "light", "MVPA"),
@@ -143,7 +142,6 @@ for (j in 1:length(rot_list)){
 
     d <- epicoda::transform_comp(df_rm[inc_ind, ], comp_labels = comp_labels, det_limit = dl)[, tl]
 
-    #print(head(d))
     df_rm[inc_ind, paste0(tl, "_s", i)] <-  d
     df_rm[, paste0(names(rot_list)[j], c("z1", "z2", "z3"), "_s", i)] <- df_rm[, paste0(tl, "_s", i)]
     
@@ -158,7 +156,6 @@ for (j in 1:length(rot_list)){
 ```
 
 # Descriptive table for repeated measurements data 
-
 - Preprocessing
 ```{r}
 # FORMAT AS DATE WHERE NEEDED
@@ -176,8 +173,6 @@ nrow(df_rm)
 vars_list <- list(
   "Wear date" = "file_start_s",
   "Overall average acceleration (mg)" = "acc.overall.avg_s",
-  # "Cut-point moderate-to-vigorous physical activity (hr/day)" = "CutPointMVPA.overall.avg_s",
-  # "Cut-point vigorous physical activity (min/day)" = "CutPointVPA.overall.avg_s",
   "ML moderate-to-vigorous physical activity (hr/day)" = "MVPA_ML4_red_s",
   "ML light physical activity (hr/day)" = "light_ML4_red_s" ,
   "ML sedentary behaviour (hr/day)" = "sedentary_ML4_red_s",
@@ -189,8 +184,7 @@ vars_list <- list(
   
 )
 ```
-
-- Processing
+Make table:
 ```{r}
 # SET UP DATA FRAME
 tab_out <-
@@ -289,13 +283,8 @@ write(tab_out_ready,
 
 ```
 
-# Supplementary Table: Flow Diagram for repeated measurements sample
-```{r}
-exc_rm
-```
-
 # Descriptive table: overall and repeated measurements samples
-
+Label admin:
 ```{r}
 df$indic_rm <- as.character(df$eid %in% df_rm$eid)
 df$indic_rm <- plyr::revalue(df$indic_rm, replace = c("TRUE" = "Repeated measures sample", "FALSE" = NA))
@@ -392,7 +381,8 @@ Observations:
 
 - stratified sampling of participants with repeated measurements
 
-# Regression models
+# Regression calibration procedure
+## Regression calibration in full dataset
 ```{r}
 coefs <- data.frame(matrix(nrow = 1, ncol = 4))
 colnames(coefs) <- paste0(names(rot_list), "_pivot1")
@@ -425,14 +415,14 @@ for (var in names(rot_list)) {
     c(paste0(var, "_pivot1"), summary(cox_basic)$conf.int[1, c(1, 3:4)])
   
   # Make all predictive models
-  ## XXX NOTE: Change to precision weighting?? 
+  ## XXX NOTE: Change to precision weighting???? This would weight the outcome by the number of measurements
   models_list <- calc_models_multi(
     var_names = form_vars,
     data = df_rm,
     suffix_baseline = "_s0",
     suffix_rep = c("_s1", "_s2", "_s3", "_s4"),
     exclusion_indic = "excluded",
-    covariates = c("age_entry", "sex")
+    covariates = c("age_entry", "sex", "ethnicity", "smoking", "alcohol", "fruit_and_veg_cats", "oily_fish", "red_and_processed_meat_cats", "education_cats", "TDI_quartiles")
   )
   
   # Make predictions
@@ -463,65 +453,24 @@ for (var in names(rot_list)) {
 }
 ```
 
-Look at doing same model calculation using 'true multivariate' approach: 
+## Bootstrap the whole procedure
+Sampling for the two step bootstrap is non-obvious, to ensure correct sample sizes. I have chosen to sample those with repeated measurements and without separately, to ensure the correct sample size in the final sample. 
 ```{r}
-# Check this results in same as multivariate model
-mvm <- calc_models_multi_single(
-    var_names = form_vars,
-    data = df_rm,
-    suffix_baseline = "_s0",
-    suffix_rep = c("_s1", "_s2", "_s3", "_s4"),
-    exclusion_indic = "excluded",
-    covariates = c("age_entry", "sex")
-  )
+n_bootstrap <- 1
 
-
-## manually calculate variance covariance matrix to check equal
-covariates <- models_list[["MVPAz1"]][[2]]
-vcov_mvm <- vcov(mvm)
-for (i in 1:3){
-  var_name <- paste0("MVPAz", i)
-  model <- models_list[[var_name]][[1]]
-  X <- model.matrix(~., df_rm[, covariates]) 
-  XtX <- t(X) %*% X
-  vcov_mod <- solve(XtX) * sum(model$residuals ^ 2) / (model$df.residual)
-  print(vcov_mod)
-  print(vcov_mvm[((i-1)*6 + 1):(i*6),((i-1)*6 + 1):(i*6) ])
-}
-```
-
-Consider properties of errors: 
-```{r}
-# Are residuals from the three models close to uncorrelated? - We don't actually need this and shouldn't expect it 
-res1 <- models_list[[1]][[1]]$residuals
-res2 <- models_list[[2]][[1]]$residuals
-res3 <- models_list[[3]][[1]]$residuals
-res <- cbind(res1, res2, res3)
-
-print(cor(res))
-
-err_cors <- correlate_errors(
-    var_names = form_vars,
-    data = df_rm,
-    suffix_baseline = "_s0",
-    suffix_rep = c("_s1", "_s2", "_s3", "_s4"),
-    exclusion_indic = "excluded")
-print(err_cors)
-```
-
-To bootstrap whole procedure:
-```{r}
-n_bootstrap <- 1000
+# Set up data frame to record estimates
 ests <- data.frame(matrix(nrow = n_bootstrap, ncol = length(names(rot_list))))
 colnames(ests) <- paste0(names(rot_list), "_pivot1")
+
+# Set up sets of ids/data subsets for sampling
 ids_rm <- df_rm$eid
 df_non_rm <- df[!(df$eid %in% ids_rm), ]
 df_limit <- df[df$eid %in% ids_rm, ]
 df_left <- df_limit[order(match(df_limit$eid, df_non_rm$eid)), ]
-
-rm(df_limit)
+rm(df_limit) # Keep tidy
 
 for (i in 1:n_bootstrap){
+  # SAMPLING-------------------------------------------------------------------------------------
   # Sample those in overlap
   df_rm_rownums_loc <- sample(nrow(df_rm), nrow(df_rm), replace = TRUE)
   df_rm_loc <- df_rm[df_rm_rownums_loc, ]
@@ -547,50 +496,55 @@ for (i in 1:n_bootstrap){
     stop("Failure to get large enough bootstrap")
   }
 
-  ## OLD METHOD: Bootstrap both separately
-  # df_rm_loc <- df_rm[sample(nrow(df_rm), nrow(df_rm), replace=TRUE), ] # i.e. same bootstrap sample for all vars
-  # df_loc <- df[sample(nrow(df), nrow(df), replace=TRUE), ]
+  # CALCULATE MODELS IN BOOTSTRAP SAMPLE--------------------------------------------------------------
+  # Note we are using same bootstrap samples for all rotations. This makes sense as we are essentially looking at the 
+  # same model in these cases
   
   for (var in names(rot_list)){
     # Find names of variables
     form_vars <- colnames(df_rm_loc)[grepl(paste0(var, "z"), colnames(df_rm_loc))]
     form_vars <- unique(gsub("_(.*)", "", form_vars))
   
-  # Make all predictive models
-  models_list <- calc_models_multi(
-    var_names = form_vars,
-    data = df_rm_loc,
-    suffix_baseline = "_s0",
-    suffix_rep = c("_s1", "_s2", "_s3", "_s4"),
-    exclusion_indic = "excluded",
-    covariates = c("age_entry", "sex")
-  )
+    # Make all predictive models
+    models_list <- calc_models_multi(
+      var_names = form_vars,
+      data = df_rm_loc,
+      suffix_baseline = "_s0",
+      suffix_rep = c("_s1", "_s2", "_s3", "_s4"),
+      exclusion_indic = "excluded",
+      covariates = c("age_entry", "sex", "ethnicity", "smoking", "alcohol", "fruit_and_veg_cats", "oily_fish", "red_and_processed_meat_cats", "education_cats", "TDI_quartiles")
+    )
   
-  # Make predictions
-  pred_data_loc <- pred_rep(models_list, newdata = df_loc, suffix_pred = "_pred")
- 
-  
-  # Variables for new calculation
-  form_vars_new <- paste0(form_vars, "_pred")
-  form_sum <- paste0(form_vars_new, collapse = "+")
-  
-  # Cox model
-  cox_mod <- coxph(formula(paste0("Surv(age_entry, age_exit, CVD_event) ~ ", form_sum, "+ strata(sex)+
-  ethnicity + smoking + alcohol + fruit_and_veg_cats + oily_fish + red_and_processed_meat_cats + education_cats + TDI_quartiles")), data = pred_data_loc)
+    # Make predictions
+    pred_data_loc <- pred_rep(models_list, newdata = df_loc, suffix_pred = "_pred")
+    
+    # Variables for new calculation
+    form_vars_new <- paste0(form_vars, "_pred")
+    form_sum <- paste0(form_vars_new, collapse = "+")
+    
+    # Cox model
+    cox_mod <- coxph(formula(paste0("Surv(age_entry, age_exit, CVD_event) ~ ", form_sum, "+ strata(sex)+ ethnicity + smoking + alcohol + fruit_and_veg_cats + oily_fish + red_and_processed_meat_cats + education_cats + TDI_quartiles")), data = pred_data_loc)
   
   # Store variables
   ests[i, paste0(var, "_pivot1")] <- summary(cox_mod)$coefficients[1, 1]
   
-  }
+  } # This closes rotation through different variables as first pivot coordinate
 }
+
+# CHECK 
 if (!isTRUE(all.equal(colnames(ests), colnames(coefs)))){
   stop("Something went wrong in column names")
 }
 
-diffs <- ests-coefs[rep(1, nrow(ests)), colnames(ests)]
+# CALCULATE BOOTSTRAP (BASIC OR REVERSE PERCENTILE BOOTSTRAP; PERCENTILE BOOTSTRAP)
+## http://users.stat.umn.edu/~helwig/notes/npboot-notes.html#bootstrap-confidence-intervals
 
-vals <- data.frame(matrix(nrow = 4, ncol = 7))
-colnames(vals) <- c("Variable", "Estimate", "Lower_CI", "Upper_CI", "HR", "HR_Lower_CI", "HR_Upper_CI")
+# For basic/reverse percentile
+diffs <- ests-coefs[rep(1, nrow(ests)), colnames(ests)] # Subtract overall estimate from estimate in bootstrap sample 
+
+# Prep data frame with values and fill it out
+vals <- data.frame(matrix(nrow = 4, ncol = 11))
+colnames(vals) <- c("Variable", "Estimate", "Lower_CI", "Upper_CI", "HR", "HR_Lower_CI", "HR_Upper_CI", "Lower_CI_percentile", "Upper_CI_percentile",  "HR_Lower_CI_percentile", "HR_Upper_CI_percentile")
 for (i in 1:length(rot_list)){
   var_name <- colnames(ests)[i]
   lq <- quantile(diffs[, var_name], 0.025)
@@ -598,106 +552,57 @@ for (i in 1:length(rot_list)){
   c <- coefs[, var_name]
   uci <- c - lq # These all need checking against notes XXX
   lci <- c - uq
-  vals[i, ] <- c(var_name, c, lci, uci, exp(c), exp(lci), exp(uci))
+  
+  lqp <- quantile(ests[, var_name], 0.025)
+  uqp <- quantile(ests[, var_name], 0.975)
+  vals[i, ] <- c(var_name, c, lci, uci, exp(c), exp(lci), exp(uci), lqp, uqp, exp(lqp), exp(uqp))
   print(hist(diffs[, var_name])) # Check reasonableness of bootstrap distributions
 }
-
-#write.csv(vals, "plots/thesis-cox-coefs-with-meas-err-adjustment.csv")
+print(vals)
+write.csv(vals, "plots/thesis-cox-coefs-with-meas-err-adjustment.csv")
 ```
-Check the 2 step bootstrap (see Keogh/White)
+Note: provided the distribution is not too skewed the different methods to calculate the bootstrap should give similar estimates. If they do not that is a cause for concern and need to choose more carefully. 
 
-
-Plots:
+## Plots
 ```{r}
 cm <- epicoda::comp_mean(df, rot_list[[1]])
-rec_dat <- data.frame(matrix(nrow = 8, ncol = 6))
-colnames(rec_dat) <-
-  c("Behaviour",
-    "Difference",
-    "Model",
-    "HR",
-    "LowerCI",
-    "UpperCI")
 
+rec_dat <- make_rec_dat_frame(8)
 for (i in 1:length(rot_list)) {
   comp_name <- names(rot_list)[i]
   var_name_pivot <- paste0(comp_name, "_pivot1")
 
-  # set up for later looking at transformation
-  if (comp_name == "MVPA") {
-    diff <- 1 / (24 * 3)
-  } else {
-    diff <- 1 / 24
-  }
-  
-  pivvar <- cm[, comp_name]
-  pivvarnew <- pivvar + diff
-
-  othvarname <- colnames(cm)[colnames(cm) != comp_name]
-  othvar <- cm[, othvarname]
-  othvarnew <- othvar
-  for (var in othvarname) {
-    othvarnew[, var] <-
-      othvar[, var] - diff * othvar[, var] / sum(othvar)
-  }#
-
-
-  ilr_old <-
-    sqrt(3 / 4) * log(pivvar / (othvar[, 1] * othvar[, 2] * othvar[, 3]) ^
-                        (1 / 3))
-  ilr_new <-
-    sqrt(3 / 4) * log(pivvarnew / (othvarnew[, 1] * othvarnew[, 2] * othvarnew[, 3]) ^
-                        (1 / 3))
-  ilr_diff <- ilr_new - ilr_old
+  # set up for looking at transformation
+  diff <- get_diff(comp_name)
+  ilr_diff <- create_ref_vals(comp_name, cm)
   
   # Calculate HRs associated with difference
   HRs <- as.double(vals[vals$Variable == var_name_pivot, 5:7]) ^ ilr_diff
   rec_dat[(i - 1) * 2 + 1,] <- c(comp_name, diff, "measurement_adjusted", HRs)
+  rm(HRs)
   
-  # Calculate HRs associated with difference unadjusted 
+  # Calculate HRs associated with difference unadjusted for measurement error
   HRs <- as.double(vals_old[vals_old$Variable == var_name_pivot, 2:4]) ^ ilr_diff
   rec_dat[(i - 1) * 2 + 2,] <- c(comp_name, diff, "original", HRs)
+  rm(HRs)
 }
 ```
+
 Plot difference: 
 ```{r}
 for (var in c("HR", "LowerCI", "UpperCI")) {
   rec_dat[, var] <- as.numeric(rec_dat[, var])
 }
 
-rdc <- rec_dat # This just saves the df so it's not a pain to get back if needed
+write.csv(rec_dat, "plots/rec_dat_meas_error.csv") # This just saves so it's not a pain to get back if needed
 
 
 ## Make forest plot --------------------------------------------------------------
 
 ### This part is admin for labels etc --------------------------------------------
-rec_dat$label <-
-  paste0(
-    round_2_dp(rec_dat$HR),
-    " (",
-    round_2_dp(rec_dat$LowerCI),
-    ", ",
-    round_2_dp(rec_dat$UpperCI),
-    ")"
-  )
-
-rec_dat$Behaviour <-
-  factor(rec_dat$Behaviour, ordered = TRUE, levels = rot_list[[1]])
-rec_dat$BehaviourDet <- plyr::revalue(
-  rec_dat$Behaviour,
-  c(
-    "MVPA" = "MVPA (extra 20 min/day)",
-    "light" = "LIPA (extra 1 hr/day)",
-    "sedentary" = "SB (extra 1 hr/day)",
-    "sleep" = "Sleep (extra 1 hr/day)"
-  )
-)
 rec_dat$Model[rec_dat$Model == "measurement_adjusted"] <- "measurement-adjusted"
-rec_dat$Model <-
-  factor(rec_dat$Model,
-         ordered = TRUE,
-         c( "measurement-adjusted", "original"))
-my_cols <- c("darkred", "black" )
+rec_dat <- do_plot_admin(rec_dat, mod_levels = c( "measurement-adjusted", "original"))
+my_cols <- get_cols(2)
 
 ### Make plot----------------------------------------------------------------------
 p <- # DATA AND AESTHETICS
@@ -724,7 +629,6 @@ p <- # DATA AND AESTHETICS
   # SCALES
   scale_x_continuous(trans = "log10", breaks = c(0.9, 0.95, 1, 1.05)) +
   scale_color_manual(values = my_cols, guide = guide_legend(reverse = TRUE)) +
- # scale_shape_manual(values = c(18, 20), guide = "none" ) +
 
   # CONSISTENT THEME
   consistent_theme
@@ -739,9 +643,39 @@ print(p)
 dev.off()
 ```
 
-# Additional checks 
+
+
+
+
+
+
+
+
+
+# Additional checks
+
+Consider properties of errors: 
+*This was to understand what properties the errors have. But actually the reg cal procedure doesn't make big assumptions about this.*
+```{r}
+# Are residuals from the three models close to uncorrelated? - We don't actually need this and shouldn't expect it 
+res1 <- models_list[[1]][[1]]$residuals
+res2 <- models_list[[2]][[1]]$residuals
+res3 <- models_list[[3]][[1]]$residuals
+res <- cbind(res1, res2, res3)
+
+print(cor(res))
+
+err_cors <- correlate_errors(
+    var_names = form_vars,
+    data = df_rm,
+    suffix_baseline = "_s0",
+    suffix_rep = c("_s1", "_s2", "_s3", "_s4"),
+    exclusion_indic = "excluded")
+print(err_cors)
+```
 
 Consider similarity of results from different ML models: 
+*This is important as I'm using reprocessed data. It's important they're essentially comparable.*
 ```{r}
 var_check <- list(list("pa", "acc.overall.avg_s0"), 
                   list("MVPA", "MVPA_ML4_red_s0"), 
