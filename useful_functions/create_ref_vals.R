@@ -10,7 +10,7 @@ get_diff <- function(comp_name){
 create_ref_vals <- function(comp_name, cm){
   
   # CHECKS -------------------------------------------------------------
-  if (!is.equal(sum(cm), 1)){
+  if (!isTRUE(all.equal(sum(cm), 1))){
     stop("Wrong scaling") # Check scaling of compositional mean
   }
   
@@ -21,14 +21,14 @@ create_ref_vals <- function(comp_name, cm){
   # EXTRACT PIVOT AND OTHER VARIABLES-----------------------------------
   pivvar <- cm[, comp_name]
   othvarname <- colnames(cm)[colnames(cm) != comp_name]
-  othvar <- cm[, othvarname]
+  othvar <- data.frame(cm[, othvarname])
   
  
   # CALCULATE NEW PIVOT VARIABLE----------------------------------------
   pivvarnew <- pivvar + diff
   
   # CALCULATE NEW OTHER VARIABLES BASED ON PROPORTIONAL REALLOCATION----
-  othvarnew <- data.frame(ncol = 0, nrow = 1)
+  othvarnew <- data.frame(matrix(ncol = 0, nrow = 1))
   for (var in othvarname) {
     othvarnew[, var] <-
       othvar[, var] - (diff * othvar[, var] / sum(othvar))
@@ -40,27 +40,17 @@ create_ref_vals <- function(comp_name, cm){
                       (1 / 3)))
   ilr_new <- sqrt(3 / 4) * log(pivvarnew / ((othvarnew[, 1] * othvarnew[, 2] * othvarnew[, 3]) ^
                       (1 / 3)))
-  
   # ADDITIONAL CHECKS----------------------------------------------------
   for (i in 1:2){
     for (j in ((i+1):3)){
-   if (!is.equal(othvar[i]/othvar[j], othvarnew[i]/othvarnew[j])){
+      if (!isTRUE(all.equal(othvar[,i]/othvar[,j], othvarnew[,i]/othvarnew[,j]))){
         stop("Ratios between the non-pivot variables are not the same")
    }
     }
   }
   
   # RETURN DIFFERENCE IN FIRST ILR COORDINATE----------------------------
-  return(ilr_new-ilr_old)
+  return(ilr_new - ilr_old)
   
   
 }
-
-
-
-
-
-
-
-
-ilr_diff <- ilr_new - ilr_old
