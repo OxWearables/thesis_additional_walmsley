@@ -45,6 +45,15 @@ vars_biom_tab_only <- c( "Systolic_blood_pressure",
   "Triglycerides")
 
 var_list_minus_age <- c(vars_orig, vars_health_orig, vars_sr_act, vars_biom_tab_only)
+
+rot_list <- list(
+  "sleep" = c("sleep", "SB", "LIPA", "MVPA"),
+  "SB" = c("SB", "sleep", "LIPA", "MVPA"),
+  "LIPA" = c("LIPA", "sleep", "SB",  "MVPA"),
+  "MVPA" = c("MVPA", "sleep", "SB", "LIPA")
+)
+
+cm <- epicoda::comp_mean(df_in, rot_list[[1]])
 ```
 
 # Deal with job status 
@@ -242,9 +251,7 @@ qt <- quantile(df_in$inverse_wt_stab, 0.99)
 df_in$inverse_wt_stab_trim <- ifelse(df_in$inverse_wt_stab > qt, qt, df_in$inverse_wt_stab)
 ```
 
-## Check these weights look reasonable! 
-
-XXX TODO Add additional variables to this table
+# Descriptive tables to understand behaviour of weights
 Set up variables for table: 
 ```{r}
 df_in$pa <- df_in$acc.overall.avg
@@ -355,17 +362,10 @@ write(t,
 
 ```
 
+# Modelling
 
 ## Run weighted Cox model
 ```{r}
-rot_list <- list(
-  "sleep" = c("sleep", "SB", "LIPA", "MVPA"),
-  "SB" = c("SB", "sleep", "LIPA", "MVPA"),
-  "LIPA" = c("LIPA", "sleep", "SB",  "MVPA"),
-  "MVPA" = c("MVPA", "sleep", "SB", "LIPA")
-)
-
-cm <- epicoda::comp_mean(df_in, rot_list[[1]])
 act_vars <- as.matrix(df_in[, rot_list[[1]]])
 rep_val <- min(act_vars[act_vars != 0])
 act_vars_z <-
@@ -373,54 +373,26 @@ act_vars_z <-
 colnames(act_vars_z) <- rot_list[[1]]
 
 
-rec_dat <- data.frame(matrix(nrow = 8, ncol = 6))
-colnames(rec_dat) <-
-  c("Behaviour",
-    "Difference",
-    "Model",
-    "HR",
-    "LowerCI",
-    "UpperCI")
+rec_dat <- make_rec_dat_frame(8)
 
 for (i in 1:length(rot_list)) {
-  # set up
+  # set up-----------------------------------------------------
   comp_labels <- rot_list[[i]]
   comp_name <- names(rot_list)[i]
 
-  # set up for later looking at transformation
-  if (comp_name == "MVPA") {
-    diff <- 1 / (24 * 3)
-  } else {
-    diff <- 1 / 24
-  }
-  pivvar <- cm[, comp_name]
-  pivvarnew <- pivvar + diff
+  # set up for later looking at transformation-----------------
+  get_diff(comp_name)
+  ilr_diff <- create_ref_vals(comp_name, cm)
 
-  othvarname <- colnames(cm)[colnames(cm) != comp_name]
-  othvar <- cm[, othvarname]
-  othvarnew <- othvar
-  for (var in othvarname) {
-    othvarnew[, var] <-
-      othvar[, var] - diff * othvar[, var] / sum(othvar)
-  }
-
-  ilr_old <-
-    sqrt(3 / 4) * log(pivvar / (othvar[, 1] * othvar[, 2] * othvar[, 3]) ^
-                        (1 / 3))
-  ilr_new <-
-    sqrt(3 / 4) * log(pivvarnew / (othvarnew[, 1] * othvarnew[, 2] * othvarnew[, 3]) ^
-                        (1 / 3))
-  ilr_diff <- ilr_new - ilr_old
-
-  # do transformation
+  # do transformation-----------------------------------------
   piv_c <-
     as.data.frame(robCompositions::pivotCoord(act_vars_z[, comp_labels]))
   colnames(piv_c) <- c("piv1", "piv2", "piv3")
 
-  # make new data with these variables
+  # make new data with these variables------------------------
   loc <- cbind(df_in, piv_c)
 
-  # basic cox model
+  # basic cox model-------------------------------------------
   cox_mod_simple <- coxph(
     Surv(age_entry, age_exit, CVD_event) ~
       strata(sex) + ethnicity + smoking + alcohol +
@@ -431,13 +403,11 @@ for (i in 1:length(rot_list)) {
     data = loc
   )
   assign(paste0("cox_", comp_name), cox_mod_simple)
-  vals <- summary(cox_mod_simple)$conf.int["piv1", c(1, 3, 4)]
-  assign(paste0("cox_pv_", comp_name), round_2_dp(vals))
-  HRs <- vals ^ ilr_diff
-  assign(paste0("cox_sub_", comp_name), HRs)
+  HRs <- calc_HRs(model = cox_mod_simple, row = "piv1", ilr_diff = ilr_diff)
   rec_dat[(i - 1) * 2 + 1,] <- c(comp_name, diff, "unweighted", HRs)
+  rm(HRs)
   
-  # Weighted Cox model 
+  # Weighted Cox model---------------------------------------- 
   cox_mod_weighted <- coxph(
     Surv(age_entry, age_exit, CVD_event) ~
       strata(sex) + ethnicity + smoking + alcohol +
@@ -445,14 +415,14 @@ for (i in 1:length(rot_list)) {
       red_and_processed_meat_cats + education_cats +
       TDI_quartiles +
       piv1 + piv2 + piv3, weights = inverse_wt_stab_trim,
-    data = loc, id = eid, robust = TRUE # see notes on coxph function, robust = TRUE (i.e. robust SEs) needed if weights are sampling weights. I'm still not sure this is correct! Although it looks good based on later research
+    data = loc, id = eid, robust = TRUE # see notes on coxph function, robust = TRUE (i.e. robust SEs) needed if weights are sampling weights.
+    # This is the most likely place for errors in this code 
+    # But it seemes that coxph with weights and robust = TRUE treats weights as sampling weights
   )
   assign(paste0("cox_weighted_", comp_name), cox_mod_weighted)
-  vals <- summary(cox_mod_weighted)$conf.int["piv1", c(1, 3, 4)]
-  assign(paste0("cox_pv_weighted_", comp_name), round_2_dp(vals))
-  HRs <- vals ^ ilr_diff
-  assign(paste0("cox_sub_weighted_", comp_name), HRs)
+  HRs <- calc_HRs(model = cox_mod_weighted, row = "piv1", ilr_diff = ilr_diff)
   rec_dat[(i - 1) * 2 + 2,] <- c(comp_name, diff, "weighted", HRs)
+  rm(HRs)
 }
 ```
 
@@ -462,39 +432,14 @@ Prep plot:
 for (var in c("HR", "LowerCI", "UpperCI")) {
   rec_dat[, var] <- as.numeric(rec_dat[, var])
 }
-
-rdc <- rec_dat # This just saves the df so it's not a pain to get back if needed
+write.csv(rec_dat, "plots/sel_bias_estimates.csv") # This just saves the df so it's not a pain to get back if needed
+```
 
 ## Make forest plot --------------------------------------------------------------
-
-### This part is admin for labels etc --------------------------------------------
-rec_dat$label <-
-  paste0(
-    round_2_dp(rec_dat$HR),
-    " (",
-    round_2_dp(rec_dat$LowerCI),
-    ", ",
-    round_2_dp(rec_dat$UpperCI),
-    ")"
-  )
-
-rec_dat$Behaviour <-
-  factor(rec_dat$Behaviour, ordered = TRUE, levels = rot_list[[1]])
-rec_dat$BehaviourDet <- plyr::revalue(
-  rec_dat$Behaviour,
-  c(
-    "MVPA" = "MVPA (extra 20 min/day)",
-    "LIPA" = "LIPA (extra 1 hr/day)",
-    "SB" = "SB (extra 1 hr/day)",
-    "sleep" = "Sleep (extra 1 hr/day)"
-  )
-)
-
-rec_dat$Model <-
-  factor(rec_dat$Model,
-         ordered = TRUE,
-         c("weighted", "unweighted"))
-my_cols <- c("darkred", "black")
+Admin:
+```{r}
+rec_dat <- do_plot_admin(rec_dat, c("weighted", "unweighted"))
+my_cols <- get_cols(2)
 ```
 
 Make plot: 
@@ -523,7 +468,6 @@ p <- # DATA AND AESTHETICS
   # SCALES
   scale_x_continuous(trans = "log10", breaks = c(0.9, 0.95, 1, 1.05)) +
   scale_color_manual(values = my_cols, guide = guide_legend(reverse = TRUE)) +
- # scale_shape_manual(values = c(18, 20), guide = "none" ) +
 
   # CONSISTENT THEME
   consistent_theme
@@ -538,6 +482,7 @@ print(p)
 dev.off()
 ```
 
+# Additional checks: concern - weighting never makes a difference
 This isn't always true:
 ```{r}
 summary(cox_mod_simple)
@@ -553,4 +498,17 @@ print(cw-cs)
 
 exp(cs[["ethnicityBlack"]])
 exp(cw[["ethnicityBlack"]])
+```
+
+
+An even starker example: look at smoking and fail to adjust for sex (or anything else in fact)
+```{r}
+cox_mod_rcheck1 <- coxph(Surv(age_entry, age_exit, CVD_event) ~ smoking, weights = inverse_wt_stab_trim,
+    data = df_in, id = eid, robust = TRUE )
+  
+cox_mod_rcheck2 <- coxph(Surv(age_entry, age_exit, CVD_event) ~ smoking, data = df_in)
+
+print(summary(cox_mod_rcheck1))
+print(summary(cox_mod_rcheck2))
+
 ```
