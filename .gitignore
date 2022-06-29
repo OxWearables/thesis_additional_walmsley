@@ -18,3 +18,5 @@ sandpit/*
 **/LEGACY*
 **/wpv-analyses/Thesis.Rmd
 **/*.db
+**/*.RDS
+chapter6_qba/selection-analyses/imputed_dataset.RDS
