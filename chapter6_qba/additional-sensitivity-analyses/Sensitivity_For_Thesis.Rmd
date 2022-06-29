@@ -10,20 +10,26 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 # Note location of input files
-```{r}
+```{r set-input-location}
 input_loc <- "../../../../paperRW2021/"
+file_loc_local <- "../../useful_functions/"
 ```
 
-# Load packages
-```{r}
+# Load packages and functions written elsewhere
+```{r loading-packages}
 lapply(c("ggplot2", "survival", "table1", "epicoda", "EValue"), library, character.only = TRUE) # Note version of epicoda: devtools::install_github("activityMonitoring/epicoda", ref = "fedd06114d664cfcd4087e6620b672e111f37ef0")
-source("../../useful_functions/round_2_dp.R")
-source("../../useful_functions/consistent_theme.R")
+
+
+fl <- list.files(file_loc_local)
+for (file in fl){
+  try(source(paste0(file_loc_local, file)))
+}
+
 source("thesis_interact_health_status.R")
 ```
 
 # Load data 
-```{r}
+```{r  loading-data}
 name_of_current_run <- "2022-01-20update_negative_control" # use data from the most recent run
 df <-  readRDS(paste0(input_loc, 
    "/epiAnalysis/inputData/",
@@ -45,8 +51,8 @@ df_sensitivity <-
   ))
 ```
 
-# Also identify healthy and unhealthy subsets
-```{r}
+# Also identify healthy , unhealthy and negative control subsets
+```{r identify-subsets}
 df$bad_health <- (df$meds|df$poor_health|(df$any_previous_I_code ==1))
 df_healthy <- df[!(df$bad_health), ]
 df_unhealthy <- df[df$bad_health, ]
@@ -55,17 +61,13 @@ df_unhealthy <- df[df$bad_health, ]
 if (nrow(df_healthy) + nrow(df_unhealthy) != nrow(df)){
   stop("Error in identification of subsets")
 }
+
+# Negative control dataset 
+df_nc <- df[df$accidents_new.prevalent == 0, ]
 ```
 
-# Set up 
-```{r}
-# Comp labels
-comp_labels <-
-  c("sleep", "SB", "LIPA", "MVPA")
-tl <-
-  transf_labels(comp_labels,
-                transformation_type = "ilr")
-
+# Set up labels etc
+```{r set-up-labels}
 # List of covariates except sex and bmi
 covs <-
   c(
@@ -79,15 +81,7 @@ covs <-
     "education_cats"
   )
 
-# List of covariates for descriptive tables
-covs_cat <- c('age_cats', 'sex', covs, 'BMI_cats')
-
-# Negative control dataset 
-df_nc <- df[df$accidents_new.prevalent == 0, ]
-```
-
-# Modelling
-```{r}
+# We'll rotate through this list to get different first pivot coordinate
 rot_list <- list(
   "sleep" = c("sleep", "SB", "LIPA", "MVPA"),
   "SB" = c("SB", "sleep", "LIPA", "MVPA"),
@@ -95,84 +89,42 @@ rot_list <- list(
   "MVPA" = c("MVPA", "sleep", "SB", "LIPA")
 )
 
+# Precalculate compositional mean as reference
+cm <- epicoda::comp_mean(df, rot_list[[1]])
 ```
 
-Testing for an interaction with health status: 
-```{r}
-# This bit just avoids on the fly zero imputation: 
+# Modelling
+
+Statistical testing: 
+*This is to get out p-values for the interaction with health status* 
+```{r statistical-testing}
+# This bit is just to avoid avoids on the fly zero imputation: 
 act_vars <- as.matrix(df[, rot_list[[1]]])
 rep_val <- min(act_vars[act_vars != 0])
 act_vars_z <-
   zCompositions::lrEM(act_vars, label = 0, rep(rep_val, length.out = 4))
 colnames(act_vars_z) <- rot_list[[1]]
 
-# Actually run models with interctions
+# Actually run models with interactions
 interact_health_status(rot_list, act_vars_z, df)
-
 ```
 
 
 Main modelling:
-```{r}
-cm <- epicoda::comp_mean(df, rot_list[[1]])
-
-# Calculate models =========================================================
-rec_dat_sensitivity <- data.frame(matrix(nrow = 8, ncol = 6))
-colnames(rec_dat_sensitivity) <-
-  c("Behaviour",
-    "Difference",
-    "Model",
-    "HR",
-    "LowerCI",
-    "UpperCI")
-
-rec_dat_nc <- data.frame(matrix(nrow = 8, ncol = 6))
-colnames(rec_dat_nc) <-
-  c("Behaviour",
-    "Difference",
-    "Model",
-    "HR",
-    "LowerCI",
-    "UpperCI")
-
-rec_dat_hu <- data.frame(matrix(nrow = 12, ncol = 6))
-colnames(rec_dat_hu) <-
-  c("Behaviour",
-    "Difference",
-    "Model",
-    "HR",
-    "LowerCI",
-    "UpperCI")
+```{r modelling}
+# Set up recording----------------------------------------------------------------------
+rec_dat_sensitivity <- make_rec_dat_frame(8)
+rec_dat_nc <- make_rec_dat_frame(8)
+rec_dat_hu <- make_rec_dat_frame(12)
 
 for (i in 1:length(rot_list)) {
   # Basic set up ------------------------------------------------------------------------
   comp_labels <- rot_list[[i]]
   comp_name <- names(rot_list)[i]
 
-  # Set up ref values for later looking at transformation --------------------------------
-  if (comp_name == "MVPA") {
-    diff <- 1 / (24 * 3)
-  } else {
-    diff <- 1 / 24
-  }
-  pivvar <- cm[, comp_name]
-  pivvarnew <- pivvar + diff
-
-  othvarname <- colnames(cm)[colnames(cm) != comp_name]
-  othvar <- cm[, othvarname]
-  othvarnew <- othvar
-  for (var in othvarname) {
-    othvarnew[, var] <-
-      othvar[, var] - diff * othvar[, var] / sum(othvar)
-  }
-
-  ilr_old <-
-    sqrt(3 / 4) * log(pivvar / (othvar[, 1] * othvar[, 2] * othvar[, 3]) ^
-                        (1 / 3))
-  ilr_new <-
-    sqrt(3 / 4) * log(pivvarnew / (othvarnew[, 1] * othvarnew[, 2] * othvarnew[, 3]) ^
-                        (1 / 3))
-  ilr_diff <- ilr_new - ilr_old
+  # Create ref values for later looking at transformation --------------------------------
+  diff <- get_diff(comp_name)
+  ilr_diff <- create_ref_vals(comp_name, cm)
 
   # do main model -----------------------------------------------------------
   main_model <-
@@ -188,16 +140,22 @@ for (i in 1:length(rot_list)) {
     comp_labels = comp_labels,
     rounded_zeroes = TRUE
   )
-  rnames <- rownames(summary(main_model)$conf.int)
-  rid <- rnames[grepl("ilr_1", rnames)]
-  vals <- summary(main_model)$conf.int[rid, c(1, 3, 4)]
-  HRs <- vals ^ ilr_diff
   
+  # Get relevant row --------------------------------------------------------
+  rid <- grep("ilr_1", rownames(summary(main_model)$conf.int), value = TRUE)
+  
+  # Calc HRs--------------------------------------------------------------------
+  HRs <- calc_HRs(model = main_model, row = rid, ilr_diff = ilr_diff)
+  
+  # Store in data frames -------------------------------------------------------
   rec_dat_sensitivity[(i - 1) * 2 + 1,] <- c(comp_name, diff, "main analysis", HRs)
   rec_dat_nc[(i-1)*2 + 1, ] <-  c(comp_name, diff, "main analysis", HRs)
   rec_dat_hu[(i - 1) * 3 + 1,] <- c(comp_name, diff, "main analysis", HRs)
   
-  ## Sensitivity analyses for reverse causation----------------------------
+  # Keep tidy ------------------------------------------------------------------
+  rm(HRs)
+  
+  ## Sensitivity analyses for reverse causation---------------------------------
   only_fu_model <-
   comp_model(
     type = "cox",
@@ -211,30 +169,11 @@ for (i in 1:length(rot_list)) {
     comp_labels = comp_labels,
     rounded_zeroes = TRUE
   )
-  vals <- summary(only_fu_model)$conf.int[rid, c(1, 3, 4)]
-  HRs <- vals ^ ilr_diff
+  
+  HRs <- calc_HRs(model = only_fu_model, row = rid, ilr_diff = ilr_diff)
   rec_dat_sensitivity[(i - 1) * 2 + 2,] <- c(comp_name, diff, "first 2 years follow-up removed", HRs)
-  
-  # main_sensitivity_model <-
-  # comp_model(
-  #   type = "cox",
-  #   covariates = c("strata(sex)", covs),
-  #   outcome = Surv(
-  #     time = df_sensitivity$age_entry,
-  #     time2 = df_sensitivity$age_exit,
-  #     event = df_sensitivity$CVD_event
-  # 
-  #   ),
-  #   data = df_sensitivity,
-  #   comp_labels = comp_labels,
-  #   rounded_zeroes = TRUE
-  # )
-  # 
-  # vals <- summary(main_sensitivity_model)$conf.int[rid, c(1, 3, 4)]
-  # HRs <- vals ^ ilr_diff
-  # rec_dat_sensitivity[(i - 1) * 3 + 3,] <- c(comp_name, diff, "first 2 years follow-up removed + healthy subcohort", HRs)
-  
-  
+  rm(HRs)
+
   ## Negative control model -------------------------------------------------
   neg_control_model <-
     comp_model(
@@ -249,10 +188,10 @@ for (i in 1:length(rot_list)) {
     comp_labels = comp_labels,
     rounded_zeroes = TRUE
   )
-  vals <- summary(neg_control_model)$conf.int[rid, c(1, 3, 4)]
-  HRs <- vals ^ ilr_diff
-  rec_dat_nc[(i - 1) * 2 + 2,] <- c(comp_name, diff, "negative control", HRs)
   
+  HRs <- calc_HRs(model = neg_control_model, row = rid, ilr_diff = ilr_diff)
+  rec_dat_nc[(i - 1) * 2 + 2,] <- c(comp_name, diff, "negative control", HRs)
+  rm(HRs)
   
   
   ## Healthy model -------------------------------------------------
@@ -269,9 +208,10 @@ for (i in 1:length(rot_list)) {
     comp_labels = comp_labels,
     rounded_zeroes = TRUE
   )
-  vals <- summary(healthy_model)$conf.int[rid, c(1, 3, 4)]
-  HRs <- vals ^ ilr_diff
+ 
+  HRs <- calc_HRs(model = healthy_model, row = rid, ilr_diff = ilr_diff)
   rec_dat_hu[(i - 1) * 3 + 2,] <- c(comp_name, diff, "healthy", HRs)
+  rm(HRs)
   
   ## Unhealthy model -------------------------------------------------
   unhealthy_model <-
@@ -287,19 +227,16 @@ for (i in 1:length(rot_list)) {
     comp_labels = comp_labels,
     rounded_zeroes = TRUE
   )
-  vals <- summary(unhealthy_model)$conf.int[rid, c(1, 3, 4)]
-  HRs <- vals ^ ilr_diff
+
+  HRs <- calc_HRs(model = unhealthy_model, row = rid, ilr_diff = ilr_diff)
   rec_dat_hu[(i - 1) * 3 + 3,] <- c(comp_name, diff, "unhealthy", HRs)
-  
-  
-  
-  
+  rm(HRs)
 }
 ```
 
 
 Admin: 
-```{r}
+```{r admin}
 for (var in c("HR", "LowerCI", "UpperCI")) {
   rec_dat_sensitivity[, var] <- as.numeric(rec_dat_sensitivity[, var])
   rec_dat_nc[, var] <- as.numeric(rec_dat_nc[, var])
@@ -311,44 +248,15 @@ rdcn <- rec_dat_nc # This just saves the df so it's not a pain to get back if ne
 rdch <- rec_dat_hu  # This just saves the df so it's not a pain to get back if needed
 ```
 
-# Forest plot - reverse causality
-
-Admin: 
+# Forest plot
+Admin for labels etc: 
 ```{r}
-### This part is admin for labels etc --------------------------------------------
-rec_dat_sensitivity$label <-
-  paste0(
-    round_2_dp(rec_dat_sensitivity$HR),
-    " (",
-    round_2_dp(rec_dat_sensitivity$LowerCI),
-    ", ",
-    round_2_dp(rec_dat_sensitivity$UpperCI),
-    ")"
-  )
-
-rec_dat_sensitivity$Behaviour <-
-  factor(rec_dat_sensitivity$Behaviour, ordered = TRUE, levels = rot_list[[1]])
-rec_dat_sensitivity$BehaviourDet <- plyr::revalue(
-  rec_dat_sensitivity$Behaviour,
-  c(
-    "MVPA" = "MVPA (extra 20 min/day)",
-    "LIPA" = "LIPA (extra 1 hr/day)",
-    "SB" = "SB (extra 1 hr/day)",
-    "sleep" = "Sleep (extra 1 hr/day)"
-  )
-)
-
-rec_dat_sensitivity$Model <-
-  factor(rec_dat_sensitivity$Model,
-         ordered = TRUE,
-         c( "first 2 years follow-up removed", "main analysis"))
-
-
-my_cols <- c( "darkred", "black")
+rec_dat_sensitivity <- do_plot_admin(rec_dat_sensitivity, mod_levels = c("first 2 years follow-up removed", "main analysis"))
+my_cols <- get_cols(2)
 ```
 
 Plotting: 
-```{r}
+```{r plot-exc-fu}
 p <- # DATA AND AESTHETICS
   ggplot(data = rec_dat_sensitivity,
             aes(
@@ -372,7 +280,6 @@ p <- # DATA AND AESTHETICS
   # SCALES
   scale_x_continuous(trans = "log10", breaks = c(0.9, 0.95, 1, 1.05)) +
   scale_color_manual(values = my_cols, guide = guide_legend(reverse = TRUE)) +
- # scale_shape_manual(values = c(18, 20), guide = "none" ) +
  
   # CONSISTENT THEME 
   consistent_theme
@@ -392,40 +299,12 @@ dev.off()
 
 Admin: 
 ```{r}
-### This part is admin for labels etc --------------------------------------------
-rec_dat_nc$label <-
-  paste0(
-    round_2_dp(rec_dat_nc$HR),
-    " (",
-    round_2_dp(rec_dat_nc$LowerCI),
-    ", ",
-    round_2_dp(rec_dat_nc$UpperCI),
-    ")"
-  )
-
-rec_dat_nc$Behaviour <-
-  factor(rec_dat_nc$Behaviour, ordered = TRUE, levels = rot_list[[1]])
-rec_dat_nc$BehaviourDet <- plyr::revalue(
-  rec_dat_nc$Behaviour,
-  c(
-    "MVPA" = "MVPA (extra 20 min/day)",
-    "LIPA" = "LIPA (extra 1 hr/day)",
-    "SB" = "SB (extra 1 hr/day)",
-    "sleep" = "Sleep (extra 1 hr/day)"
-  )
-)
-
-rec_dat_nc$Model <-
-  factor(rec_dat_nc$Model,
-         ordered = TRUE,
-         c("negative control", "main analysis"))
-
-
-my_cols <- c("darkred", "black")
+rec_dat_nc <- do_plot_admin(rec_dat_nc, mod_levels = c("negative control", "main analysis"))
+my_cols <- get_cols(2)
 ```
 
 Plotting:
-```{r}
+```{r plot-nc}
 p <- # DATA AND AESTHETICS
   ggplot(data = rec_dat_nc,
             aes(
@@ -449,7 +328,6 @@ p <- # DATA AND AESTHETICS
   # SCALES
   scale_x_continuous(trans = "log10", breaks = c(0.9, 0.95, 1, 1.05)) +
   scale_color_manual(values = my_cols, guide = guide_legend(reverse = TRUE)) +
- # scale_shape_manual(values = c(18, 20), guide = "none" ) +
 
   # CONSISTENT THEME
   consistent_theme
@@ -465,44 +343,15 @@ dev.off()
 ```
 
 
-# Forest plot - reverse causality
-
+# Forest plot - healthy/unhealthy
 Admin: 
 ```{r}
-### This part is admin for labels etc --------------------------------------------
-rec_dat_hu$label <-
-  paste0(
-    round_2_dp(rec_dat_hu$HR),
-    " (",
-    round_2_dp(rec_dat_hu$LowerCI),
-    ", ",
-    round_2_dp(rec_dat_hu$UpperCI),
-    ")"
-  )
-
-rec_dat_hu$Behaviour <-
-  factor(rec_dat_hu$Behaviour, ordered = TRUE, levels = rot_list[[1]])
-rec_dat_hu$BehaviourDet <- plyr::revalue(
-  rec_dat_hu$Behaviour,
-  c(
-    "MVPA" = "MVPA (extra 20 min/day)",
-    "LIPA" = "LIPA (extra 1 hr/day)",
-    "SB" = "SB (extra 1 hr/day)",
-    "sleep" = "Sleep (extra 1 hr/day)"
-  )
-)
-
-rec_dat_hu$Model <-
-  factor(rec_dat_hu$Model,
-         ordered = TRUE,
-         c("unhealthy", "healthy", "main analysis"))
-
-
-my_cols <- c(viridis::viridis(n = 3)[2:1], "black")
+rec_dat_hu <- do_plot_admin(rec_dat_hu, mod_levels =  c("unhealthy", "healthy", "main analysis"))
+my_cols <- get_cols(3)
 ```
 
 Plotting: 
-```{r}
+```{r plot-healthy-unhealthy}
 p <- # DATA AND AESTHETICS
   ggplot(data = rec_dat_hu,
             aes(
@@ -547,16 +396,17 @@ dev.off()
 
 Calculating: 
 ```{r}
-rec_dat_basic <- rec_dat_nc[seq(1, 7, by =2), ]
+rec_dat_basic <- rec_dat_nc[seq(1, 7, by =2), ] # Take only main model lines
 rec_dat_basic$Model <- NULL
 rec_dat_basic$Difference <- NULL
 rec_dat_basic$EValue <- NA
 rec_dat_basic$IntervalBound <- NA
 
 for (i in 1:nrow(rec_dat_basic)){
-  print(i)
-  evals <- evalues.RR(est = rec_dat_basic$HR[i], lo = rec_dat_basic$LowerCI[i], hi = rec_dat_basic$UpperCI[i], true = 1)
-  print(evals)
+  # Calculate E values---------------------------------------------------------
+  evals <- evalues.RR(est = rec_dat_basic$HR[i], lo = rec_dat_basic$LowerCI[i], hi = rec_dat_basic$UpperCI[i], true = 1) # We can use RR formula because of low prevalence. There is a bug in evalues.HR with most recent versions of R
+  
+  # Fill out E Values-----------------------------------------------------------
   rec_dat_basic$EValue[i] <- evals["E-values", "point"]
   if (rec_dat_basic$HR[i] < 1){
     rec_dat_basic$IntervalBound[i] <- evals["E-values", "upper"]
@@ -565,9 +415,11 @@ for (i in 1:nrow(rec_dat_basic)){
    rec_dat_basic$IntervalBound[i] <- evals["E-values", "lower"]
   }
 }
+
+# Make more complex composite columns
 rec_dat_basic$EValDesc <- paste0(round_2_dp(rec_dat_basic$EValue), " (", round_2_dp(rec_dat_basic$IntervalBound), ")")
 rec_dat_basic$full_label <- paste0(rec_dat_basic$label, "         ", rec_dat_basic$EValDesc)
-rec_dat_basic <- rbind(data.frame("Behaviour" = " ",   "HR"= NA, "LowerCI" = NA, "UpperCI" = NA, "label" = NA,      "BehaviourDet" = " ",  "EValue" = NA, "IntervalBound" = NA,  "EValDesc" = NA, "full_label" = "HR (CI)                        E-Value (Bound)") , rec_dat_basic)
+rec_dat_basic <- rbind(data.frame("Behaviour" = " ",   "HR"= NA, "LowerCI" = NA, "UpperCI" = NA, "label" = "HR (CI)",      "BehaviourDet" = " ",  "EValue" = NA, "IntervalBound" = NA,  "EValDesc" = NA, "full_label" = "HR (CI)                        E-Value (Bound)") , rec_dat_basic)
 rec_dat_basic$Behaviour <-
   factor(rec_dat_basic$Behaviour, ordered = TRUE, levels = c(rot_list[[1]], " "))
 rec_dat_basic$BehaviourDet <- plyr::revalue(
@@ -577,13 +429,13 @@ rec_dat_basic$BehaviourDet <- plyr::revalue(
     "LIPA" = "LIPA (extra 1 hr/day)",
     "SB" = "SB (extra 1 hr/day)",
     "sleep" = "Sleep (extra 1 hr/day)", 
-    " " = " "
+     " " = " "
   )
 )
 
 ```
 
-Plotting: 
+Plotting with evals: 
 ```{r}
 p <- # DATA AND AESTHETICS
   ggplot(data = rec_dat_basic,
@@ -622,7 +474,7 @@ dev.off()
 Plotting without evals: 
 ```{r}
 p <- # DATA AND AESTHETICS
-  ggplot(data = rec_dat_basic[2:5, ],
+  ggplot(data = rec_dat_basic,
             aes(
               x = HR,
               y = BehaviourDet,
