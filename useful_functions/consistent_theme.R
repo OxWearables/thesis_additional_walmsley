@@ -1,6 +1,7 @@
 consistent_theme <-list(# CANVAS
   coord_cartesian(xlim = c(0.85, 1.1), # This focuses the x-axis on the range of interest
                 clip = 'off'), # but this allows stuff outside that range (the HRs) to still show
+  labs(x = "Hazard Ratio"),
   # THEMES
   theme_classic() , 
   theme(
