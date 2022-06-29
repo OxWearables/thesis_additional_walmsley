@@ -1,70 +1,29 @@
-
-source("../../useful_functions/consistent_theme.R")
-
-prep_record <- function(tp_vec, rot_list){
-  rec_dat <- data.frame(matrix(nrow = (length(tp_vec)+1)*length(rot_list[[1]]), ncol = 7))
-  colnames(rec_dat) <- c("Behaviour",
-                                 "Difference",
-                                 "TimePeriod",
-                                 "HR",
-                                 "LowerCI",
-                                 "UpperCI",
-                                 "pval_overall_interaction")
-  return(rec_dat)
-}
-
-
-get_ilr_diff <- function(cm, diff, comp_name){
-  pivvar <- cm[, comp_name]
-  pivvarnew <- pivvar + diff
-  
-  othvarname <- colnames(cm)[colnames(cm) != comp_name]
-  othvar <- cm[, othvarname]
-  othvarnew <- othvar
-  
-  for (var in othvarname) {
-    othvarnew[, var] <-
-    othvar[, var] - diff * othvar[, var] / sum(othvar)
-    }
-  ilr_old <-
-    sqrt(3 / 4) * log(pivvar / (othvar[, 1] * othvar[, 2] * othvar[, 3]) ^
-                      (1 / 3))
-  ilr_new <-
-  sqrt(3 / 4) * log(pivvarnew / (othvarnew[, 1] * othvarnew[, 2] * othvarnew[, 3]) ^
-                      (1 / 3))
-  ilr_diff <- ilr_new - ilr_old
-  return(ilr_diff)
-}
-
-
-
 produce_tp_plot <- function(tp_vec, rot_list, cm, act_vars_z, df){
- 
-  rec_dat <- prep_record(tp_vec, rot_list)
-
+  # Make recording frame for time period ------------------------------------------------------
+  rec_dat <- make_rec_dat_frame(tp_vec, rot_list)
+  names(rec_dat)[names(rec_dat) == "Model"] <- "TimePeriod" # Modifications to data frame to make it more like what is needed here
+  rec_dat$pval_overall_interaction <- NA
+  
+  # Iterate over choice of first pivot coordinate ------------------------------------------
   for (i in 1:length(rot_list)) {
-    # set up
+    
+    # Set up--------------------------------------------------------------------------------
     comp_labels <- rot_list[[i]]
     comp_name <- names(rot_list)[i]
     
-    # set up for later looking at transformation
-    if (comp_name == "MVPA") {
-      diff <- 1 / (24 * 3)
-    } else {
-      diff <- 1 / 24
-    }
-    
-    ilr_diff <- get_ilr_diff(cm, diff, comp_name)
+    ## Create values to use in transformation
+    diff <- get_diff(comp_name)
+    ilr_diff <- create_ref_vals(comp_name, cm)
 
-    # do transformation
+    ## Do transformation
     piv_c <-
       as.data.frame(robCompositions::pivotCoord(act_vars_z[, comp_labels]))
     colnames(piv_c) <- c("piv1", "piv2", "piv3")
 
-    # make new data with these variables
+    ## Make new data with these variables
     loc <- cbind(df, piv_c)
 
-    # basic cox model
+    # Basic Cox model-----------------------------------------------------------------------
     cox_mod_simple <- coxph(
       Surv(age_entry, age_exit, CVD_event) ~
         strata(sex) + ethnicity + smoking + alcohol +
@@ -75,12 +34,12 @@ produce_tp_plot <- function(tp_vec, rot_list, cm, act_vars_z, df){
       data = loc
     )
     
-    vals <- summary(cox_mod_simple)$conf.int["piv1", c(1, 3, 4)]
-    HRs <- vals ^ ilr_diff
+    HRs <- calc_HRs(model = cox_mod_simple, row = "piv1", ilr_diff = ilr_diff)
     rec_dat[(i - 1) * (length(tp_vec)+1)+ 1,] <- c(comp_name, diff, "overall", HRs, NA)
+    rm(HRs)
 
 
-    # run Lexis expansion---------------------------------------------------------------
+    # Run Lexis expansion--------------------------------------------------------------------
     lex <- Lexis(
       entry = list(age = age_entry,
                    tos = 0),
@@ -92,12 +51,13 @@ produce_tp_plot <- function(tp_vec, rot_list, cm, act_vars_z, df){
     spl$time_period <- factor(timeBand(spl, "tos", "left") / 365.25)
     spl$lex.exage <- spl$age + spl$lex.dur
 
-    # Run Cox models with period split ------------------------------------------------
-    # Quickly get different reference time periods by change of reference ---------------
+    # Run Cox models with period split -----------------------------------------------------
+    # Quickly get different reference time periods by change of reference. This is rather than taking single model 
+    # and doing manual calculation to get different rows
     times <- levels(spl$time_period)
     for (j in 1:length(times)) {
       ref <- times[j]
-      spl$time_period <- relevel(spl$time_period, ref = ref)
+      spl$time_period <- relevel(spl$time_period, ref = ref) # Relevel to use this reference time period
       cox_mod_by_period <- coxph(
         Surv(age, lex.exage, lex.Xst) ~
           strata(sex) + ethnicity + smoking + alcohol +
@@ -117,14 +77,12 @@ produce_tp_plot <- function(tp_vec, rot_list, cm, act_vars_z, df){
           time_period,
         data = spl
       )
-
       p_val_int <- anova(cox_mod_by_period, cox_mod_by_period_no_interact)$`P(>|Chi|)`[2]
-      ci <- summary(cox_mod_by_period)$conf.int[, c(1, 3, 4)]
       
-      print(summary(cox_mod_by_period))
+      print(summary(cox_mod_by_period)) # Do some inspection to examine correct
       
-      HRs <- ci["piv1",] ^ ilr_diff
-
+      # Recording results
+      HRs <- calc_HRs(model = cox_mod_by_period, row = "piv1", ilr_diff = ilr_diff)
       tpname <- names(tp_vec)[tp_vec == as.numeric(ref)]
       rec_dat[(i - 1) * (length(tp_vec) + 1) + j + 1,] <-
         c(comp_name,
@@ -132,47 +90,25 @@ produce_tp_plot <- function(tp_vec, rot_list, cm, act_vars_z, df){
           tpname,
           HRs,
           p_val_int)
-    }
+      
+      rm(ref, HRs)
+    } # This closes iteration over times
+  
+    rm(loc, spl)
 
-
-  }
+  } # This closes iteration over variable in first pivot coordinate
 
   for (var in c("HR", "LowerCI", "UpperCI")) {
     rec_dat[, var] <- as.numeric(rec_dat[, var])
   }
 
   ## Make forest plot --------------------------------------------------------------
-
   ### This part is admin for labels etc --------------------------------------------
-  rec_dat$label <-
-    paste0(
-      round_2_dp(rec_dat$HR),
-      " (",
-      round_2_dp(rec_dat$LowerCI),
-      ", ",
-      round_2_dp(rec_dat$UpperCI),
-      ")"
-    )
-
-  rec_dat$Behaviour <-
-    factor(rec_dat$Behaviour, ordered = TRUE, levels = rot_list[[1]])
-  rec_dat$BehaviourDet <- plyr::revalue(
-    rec_dat$Behaviour,
-    c(
-      "MVPA" = "MVPA (extra 20 min/day)",
-      "LIPA" = "LIPA (extra 1 hr/day)",
-      "SB" = "SB (extra 1 hr/day)",
-      "sleep" = "Sleep (extra 1 hr/day)"
-    )
-  )
-
-  rec_dat$TimePeriod <-
-    factor(rec_dat$TimePeriod,
-           ordered = TRUE,
-           c(rev(names(tp_vec)), "overall"))
+  rec_dat$Model <- rec_dat$TimePeriod # This is just a quick hack to use the function designed elsewhere here
+  rec_dat <- do_plot_admin(rec_dat, mod_levels = c(rev(names(tp_vec)), "overall"))
+  rec_dat$TimePeriod <- rec_dat$Model
   rec_dat$all_p <- as.factor(rec_dat$TimePeriod == "overall")
-  
-  my_cols <- c(viridis::viridis(n = length(tp_vec)), "black")
+  my_cols <- get_cols(length(tp_vec) + 1)
 
   ### Make plot----------------------------------------------------------------------
   p <- # DATA AND AESTHETICS
@@ -199,8 +135,7 @@ produce_tp_plot <- function(tp_vec, rot_list, cm, act_vars_z, df){
     # SCALES
     scale_x_continuous(trans = "log10", breaks = c(0.9, 0.95, 1, 1.05)) +
     scale_color_manual(values = my_cols, guide = guide_legend(reverse = TRUE)) +
-    # scale_shape_manual(values = c(18, 20), guide = "none" ) +
-
+  
    # CONSISTENT THEME
     consistent_theme
 

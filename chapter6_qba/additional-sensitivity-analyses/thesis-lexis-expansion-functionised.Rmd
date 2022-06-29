@@ -19,15 +19,22 @@ library(Epi)
 library(ggplot2)
 ```
 
+# Locations of data and functions
+```{r}
+input_loc <- "../../../../paperRW2021/"
+file_loc_local <- "../../useful_fuctions/"
+```
+
 # Source functions 
 ```{r}
 source("thesis-lexis-expansion-functionised.R")
+fl <- list.files(file_loc_local)
+for (file in fl){
+  try(source(paste0(file_loc_local, file)))
+}
 ```
 
-# Name where data is
-```{r}
-input_loc <- "../../../../paperRW2021/"
-```
+
 
 # Load data 
 ```{r}
