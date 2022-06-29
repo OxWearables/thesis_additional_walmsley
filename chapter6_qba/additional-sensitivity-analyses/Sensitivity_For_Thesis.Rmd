@@ -251,6 +251,7 @@ rdch <- rec_dat_hu  # This just saves the df so it's not a pain to get back if n
 # Forest plot
 Admin for labels etc: 
 ```{r}
+rec_dat_sensitivity <- rdcs
 rec_dat_sensitivity <- do_plot_admin(rec_dat_sensitivity, mod_levels = c("first 2 years follow-up removed", "main analysis"))
 my_cols <- get_cols(2)
 ```
@@ -279,7 +280,7 @@ p <- # DATA AND AESTHETICS
 
   # SCALES
   scale_x_continuous(trans = "log10", breaks = c(0.9, 0.95, 1, 1.05)) +
-  scale_color_manual(values = my_cols, guide = guide_legend(reverse = TRUE)) +
+  scale_color_manual(values = my_cols, guide = guide_legend(reverse = TRUE), na.translate = FALSE) +
  
   # CONSISTENT THEME 
   consistent_theme
@@ -296,7 +297,6 @@ dev.off()
 
 
 # Forest plot - negative control
-
 Admin: 
 ```{r}
 rec_dat_nc <- do_plot_admin(rec_dat_nc, mod_levels = c("negative control", "main analysis"))
@@ -327,7 +327,7 @@ p <- # DATA AND AESTHETICS
   
   # SCALES
   scale_x_continuous(trans = "log10", breaks = c(0.9, 0.95, 1, 1.05)) +
-  scale_color_manual(values = my_cols, guide = guide_legend(reverse = TRUE)) +
+  scale_color_manual(values = my_cols, guide = guide_legend(reverse = TRUE), na.translate = FALSE) +
 
   # CONSISTENT THEME
   consistent_theme
@@ -374,8 +374,7 @@ p <- # DATA AND AESTHETICS
 
   # SCALES
   scale_x_continuous(trans = "log10", breaks = c(0.9, 0.95, 1, 1.05)) +
-  scale_color_manual(values = my_cols, guide = guide_legend(reverse = TRUE)) +
- # scale_shape_manual(values = c(18, 20), guide = "none" ) +
+  scale_color_manual(values = my_cols, guide = guide_legend(reverse = TRUE), na.translate = FALSE) +
 
   # CONSISTENT THEME 
   consistent_theme
@@ -396,7 +395,7 @@ dev.off()
 
 Calculating: 
 ```{r}
-rec_dat_basic <- rec_dat_nc[seq(1, 7, by =2), ] # Take only main model lines
+rec_dat_basic <- rec_dat_nc[seq(2, 8, by =2), ] # Take only main model lines
 rec_dat_basic$Model <- NULL
 rec_dat_basic$Difference <- NULL
 rec_dat_basic$EValue <- NA
