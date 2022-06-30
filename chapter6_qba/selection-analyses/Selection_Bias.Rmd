@@ -36,7 +36,8 @@ vars_health_orig <- c("BMI", "poor_health", "meds")
 vars_sr_act <-   c("Self_reported_MPA",
   "Self_reported_VPA", 
   "Job_involves_walking_standing",
-  "Job_involves_activity")
+  "Job_involves_activity", 
+  "Self_reported_usual_walking_pace")
 vars_biom_tab_only <- c( "Systolic_blood_pressure",
   "HbA1c",
   "C_Reactive_Protein",
@@ -113,6 +114,8 @@ for (var in c("baseline_age", var_list_minus_age)){
 df_all$baseline_age_ten_years <- as.double(df_all$baseline_age)/(365.25*10)
 df_all$Self_reported_MPA <- as.double(df_all$Self_reported_MPA)
 df_all$Self_reported_VPA <- as.double(df_all$Self_reported_VPA)
+df_all$Category_Self_reported_MPA <- cut(df_all$Self_reported_MPA, quantile(df_all$Self_reported_MPA, seq(0, 1, 0.2), na.rm = TRUE))
+df_all$Category_Self_reported_VPA <- cut(df_all$Self_reported_VPA, c(-1, 0.000000000000001, 10.000000000000000001, 20.00000000000001, 30.0000000000000001, 60.00000000000001, 1441))
 
 ```
 
@@ -135,15 +138,16 @@ var_list_imp <-
     "log_BMI",
     "poor_health",
     "meds",
-    "log_1plus_Self_reported_MPA",
-    "log_1plus_Self_reported_VPA",
+    "Category_Self_reported_MPA",
+    "Category_Self_reported_VPA",
     "Job_involves_walking_standing",
     "Job_involves_activity",
-    "log_Systolic_blood_pressure",
+    "Self_reported_usual_walking_pace",
+    "Systolic_blood_pressure",
     "log_HbA1c",
     "log_C_Reactive_Protein",
-    "log_LDL_cholesterol",
-    "log_HDL_cholesterol",
+    "LDL_cholesterol",
+    "HDL_cholesterol",
     "log_Triglycerides"
   )
 print(paste0(var_list_imp[2:length(var_list_imp)], collapse = "+")) # get the variables for use in models
@@ -174,9 +178,10 @@ log_inc <-
       in_analytic_sample ~ baseline_age_ten_years + sex + ethnicity + smoking +
         alcohol + fruit_and_veg_cats + red_and_processed_meat_cats + oily_fish +
         TownsendDeprIndexRecruit + education_cats + log_BMI + poor_health + meds +
-        log_1plus_Self_reported_MPA + log_1plus_Self_reported_VPA + Job_involves_walking_standing +
-        Job_involves_activity + log_Systolic_blood_pressure + log_HbA1c + log_C_Reactive_Protein +
-        log_LDL_cholesterol + log_HDL_cholesterol + log_Triglycerides,
+        Category_Self_reported_MPA + Category_Self_reported_VPA + Job_involves_walking_standing +
+        Job_involves_activity + Self_reported_usual_walking_pace + Systolic_blood_pressure +
+        log_HbA1c + log_C_Reactive_Protein + LDL_cholesterol + HDL_cholesterol +
+        log_Triglycerides,
       family = binomial
     )
   )
@@ -187,17 +192,25 @@ pool_model <- pool(log_inc)
 summary(pool_model)
 
 # Grab coefficients
-mod_coef <- summary(pool_model, conf.int = TRUE, exponentiate = TRUE)[, c("term", "estimate", "2.5 %", "97.5 %")]
-tab_wt_model_f <- cbind(mod_coef[, 1, drop = FALSE], format(round(mod_coef[, 2:4], digits = 2), nsmall = 2))
-tab_wt_model_f$`OR (CI)` <- paste0(tab_wt_model_f[, 2], " (", tab_wt_model_f[, 3], ", ", tab_wt_model_f[, 4], ")")
+mod_coef <-
+  summary(pool_model, conf.int = TRUE, exponentiate = TRUE)[, c("term", "estimate", "2.5 %", "97.5 %")]
+tab_wt_model_f <-
+  cbind(mod_coef[, 1, drop = FALSE], format(round(mod_coef[, 2:4], digits = 2), nsmall = 2))
+tab_wt_model_f$`OR (CI)` <-
+  paste0(tab_wt_model_f[, 2],
+         " (",
+         tab_wt_model_f[, 3],
+         ", ",
+         tab_wt_model_f[, 4],
+         ")")
 t <-
-   knitr::kable(
-     tab_wt_model_f[, c("term", "OR (CI)")],
-     format = "latex",
-     booktabs = TRUE,
-     longtable = TRUE
- )
- write(t, "plots/table-weight-model.tex")
+  knitr::kable(
+    tab_wt_model_f[, c("term", "OR (CI)")],
+    format = "latex",
+    booktabs = TRUE,
+    longtable = TRUE
+  )
+write(t, "plots/table-weight-model.tex")
 ```
 
 Do logistic regression model in each imputed dataset:
@@ -241,6 +254,7 @@ df_in <-
   merge(df_in, df_all[, c("eid", "inverse_wt_stab", "selec_prob", vars_sr_act,  vars_biom_tab_only)], by = "eid")
 
 summary(df_all$inverse_wt_stab)
+
 # Stabilisation changes the effective population size
 # Before: 
 sum(1/df_in$selec_prob)

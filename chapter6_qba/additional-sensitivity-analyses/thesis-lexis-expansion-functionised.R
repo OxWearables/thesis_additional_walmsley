@@ -1,6 +1,6 @@
 produce_tp_plot <- function(tp_vec, rot_list, cm, act_vars_z, df){
   # Make recording frame for time period ------------------------------------------------------
-  rec_dat <- make_rec_dat_frame(tp_vec, rot_list)
+  rec_dat <- make_rec_dat_frame((length(tp_vec)+1)*length(rot_list))
   names(rec_dat)[names(rec_dat) == "Model"] <- "TimePeriod" # Modifications to data frame to make it more like what is needed here
   rec_dat$pval_overall_interaction <- NA
   
@@ -134,7 +134,7 @@ produce_tp_plot <- function(tp_vec, rot_list, cm, act_vars_z, df){
 
     # SCALES
     scale_x_continuous(trans = "log10", breaks = c(0.9, 0.95, 1, 1.05)) +
-    scale_color_manual(values = my_cols, guide = guide_legend(reverse = TRUE)) +
+    scale_color_manual(values = my_cols, guide = guide_legend(reverse = TRUE), na.translate = FALSE) +
   
    # CONSISTENT THEME
     consistent_theme
