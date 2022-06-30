@@ -13,7 +13,7 @@ interact_health_status <- function(rot_list, act_vars_z, df){
     # make new data with these variables
     loc <- cbind(df, piv_c)
 
-    # basic cox model
+    # basic cox model with health statusi included
     cox_mod_simple <- coxph(
       Surv(age_entry, age_exit, CVD_event) ~
         strata(sex) + ethnicity + smoking + alcohol +

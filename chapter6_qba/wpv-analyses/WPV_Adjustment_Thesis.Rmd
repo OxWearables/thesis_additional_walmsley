@@ -118,33 +118,44 @@ print(exc_rm)
 # Repeated measurements data prep
 - Add ilr transformed variables:
 ```{r}
+# List of elements -----------------------------------------------------------------------------------------------------------
 rot_list <- list(
   "sleep" = c("sleep", "sedentary", "light", "MVPA"),
-   "sedentary" = c("sedentary", "sleep", "light", "MVPA"),
-   "light" = c("light", "sleep", "sedentary",  "MVPA"),
-   "MVPA" = c("MVPA", "sleep", "sedentary", "light")
-)
+  "sedentary" = c("sedentary", "sleep", "light", "MVPA"),
+  "light" = c("light", "sleep", "sedentary",  "MVPA"),
+  "MVPA" = c("MVPA", "sleep", "sedentary", "light")
+) 
+
+# The class labels in the repeated measurements dataset are different to in the main dataset, so relabel the main dataset to match the repeated measurements dataset ---------------------------------------------------------------------------------------------------------
 df$sedentary <- df$SB
 df$light <- df$LIPA
 for (var in rot_list[[1]]){
   df[, paste0(var, "_ML4_red_s0")] <- df[, var]
 }
 
+
+# Cycle through different first pivot coordinates adding in the set of pivot coordinates with this first pivot coordinate----------------------
 for (j in 1:length(rot_list)){
   for (i in 0:4){
+    # Add in transformed variables for each repeat----------------------
     comp_labels <- paste0(rot_list[[j]], "_ML4_red_s", i)
-    dl <- min(df$MVPA[df$MVPA>0])
-    print(comp_labels)
     tl <- epicoda::transf_labels(comp_labels, transformation_type = "ilr")
   
+    # Det limit for zero imputation------------------------------------
+    dl <- min(df$MVPA[df$MVPA>0]) # This is coming from the main study as a better overall source
+    
+    # Set up a mask for rows which will not appear----------------------
     df_rm[, paste0(tl, i)] <- NA
     inc_ind <- !(df_rm[, paste0("excluded_s", i)]) & !(is.na(df_rm[, paste0("excluded_s", i)]))
 
+    # Do and store transformation---------------------------------------
     d <- epicoda::transform_comp(df_rm[inc_ind, ], comp_labels = comp_labels, det_limit = dl)[, tl]
 
+    # Put these back in the data frame with a label for the repeat-----
     df_rm[inc_ind, paste0(tl, "_s", i)] <-  d
     df_rm[, paste0(names(rot_list)[j], c("z1", "z2", "z3"), "_s", i)] <- df_rm[, paste0(tl, "_s", i)]
     
+    # Only on the first repeat, also transform the data in the main dataset-------------
     if (i == 0){
       d2 <- epicoda::transform_comp(df, comp_labels = comp_labels, det_limit = dl)[, tl]
       df[, paste0(names(rot_list)[j], c("z1", "z2", "z3"), "_s", i)] <- d2[, tl]
@@ -153,6 +164,7 @@ for (j in 1:length(rot_list)){
   }
 }
 
+# Note that the labelling of columns is a little weird - MVPAz2_s0 refers to z2 for the case where MVPA was the pivot at repeat 0
 ```
 
 # Descriptive table for repeated measurements data 
@@ -456,7 +468,7 @@ for (var in names(rot_list)) {
 ## Bootstrap the whole procedure
 Sampling for the two step bootstrap is non-obvious, to ensure correct sample sizes. I have chosen to sample those with repeated measurements and without separately, to ensure the correct sample size in the final sample. 
 ```{r}
-n_bootstrap <- 1
+n_bootstrap <- 1000
 
 # Set up data frame to record estimates
 ests <- data.frame(matrix(nrow = n_bootstrap, ncol = length(names(rot_list))))
@@ -628,7 +640,7 @@ p <- # DATA AND AESTHETICS
 
   # SCALES
   scale_x_continuous(trans = "log10", breaks = c(0.9, 0.95, 1, 1.05)) +
-  scale_color_manual(values = my_cols, guide = guide_legend(reverse = TRUE)) +
+  scale_color_manual(values = my_cols, guide = guide_legend(reverse = TRUE), na.translate = FALSE) +
 
   # CONSISTENT THEME
   consistent_theme
@@ -675,7 +687,7 @@ print(err_cors)
 ```
 
 Consider similarity of results from different ML models: 
-*This is important as I'm using reprocessed data. It's important they're essentially comparable.*
+*This is important as I'm using reprocessed data. It's important they're essentially comparable. It's the 'same measurement' for practical purposes.*
 ```{r}
 var_check <- list(list("pa", "acc.overall.avg_s0"), 
                   list("MVPA", "MVPA_ML4_red_s0"), 

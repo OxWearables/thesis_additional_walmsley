@@ -30,6 +30,7 @@ file_loc_local <- "../../useful_fuctions/"
 source("thesis-lexis-expansion-functionised.R")
 fl <- list.files(file_loc_local)
 for (file in fl){
+  print(file)
   try(source(paste0(file_loc_local, file)))
 }
 ```
