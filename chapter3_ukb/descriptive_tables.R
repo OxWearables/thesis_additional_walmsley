@@ -34,13 +34,18 @@ source("useful_functions/round_2_dp.R")
 # READ DATA ===================
 df <-
   data.frame(data.table::fread("data/thesis-phenoData-20220124.csv")) 
-df2 <- data.frame(data.table::fread("data/data_vig_20220615.csv")) # This adds in 
+df2 <- data.frame(data.table::fread("data/data_vig_20220615.csv")) # This adds in variables needed for self-reported vigorous
+df3 <- data.frame(data.table::fread("data/data_met_minutes_20220705.csv"))
+df3$p31 <- NULL
 df <- merge(df, df2[, ], by = "eid")
+df <- merge(df, df3, by = "eid")
 
 df_analysis <-
   readRDS(
     "../../paperRW2021/epiAnalysis/inputData/2021-06-17check_messages_ready_to_use.RDS"
-  ) # this is the dataset from the epi analysis. need this to isolate relevant set of IDs# DATA CLEANING AND PREP==============
+  ) # this is the dataset from the epi analysis. need this to isolate relevant set of IDs
+
+# DATA CLEANING AND PREP==============
 # There's one participant with no data at all
 nbef <- nrow(df)
 df <- df[df$p31 != "", ]
@@ -95,7 +100,10 @@ fields <-
     "employed" = 6142, 
     "usual_walk_pace" = 924,
     "sr_any_mpa_days" = 884, 
-    "sr_any_vpa_days"= 904 
+    "sr_any_vpa_days"= 904, 
+    "sr_metmin_walk" = 22037, 
+    "sr_metmin_mpa" = 22038, 
+    "sr_metmin_vpa" = 22039 
   )
 
 for (i in 1:length(fields)) {
@@ -322,6 +330,9 @@ df$Job_involves_walking_standing <- df$job_walk_stand_i0
 df$Self_reported_MPA[df$sr_any_mpa_days_i0 == "0"] <- 0
 df$Self_reported_VPA[df$sr_any_vpa_days_i0 == "0"] <- 0
 df$Self_reported_usual_walking_pace <- df$usual_walk_pace_i0
+df$Self_reported_MET_minutes_walking <- df$sr_metmin_walk_i0
+df$Self_reported_MET_minutes_MPA <- df$sr_metmin_mpa_i0
+df$Self_reported_MET_minutes_VPA <- df$sr_metmin_vpa_i0
 
 # Baseline vals
 df$BMI <- df$bmi_i0
@@ -366,6 +377,9 @@ vars_sr_act <-
   c(
     "Self_reported_MPA",
     "Self_reported_VPA",
+    "Self_reported_MET_minutes_walking",
+    "Self_reported_MET_minutes_MPA",
+    "Self_reported_MET_minutes_VPA",
     "Job_involves_walking_standing",
     "Job_involves_activity", 
     "Self_reported_usual_walking_pace"
