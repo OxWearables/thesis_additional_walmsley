@@ -383,7 +383,7 @@ p <- # DATA AND AESTHETICS
 svg(
   "plots/thesis-healthy-unhealthy.svg",
   width = 10,
-  height = 5
+  height = 7
 )
 print(p)
 dev.off()
