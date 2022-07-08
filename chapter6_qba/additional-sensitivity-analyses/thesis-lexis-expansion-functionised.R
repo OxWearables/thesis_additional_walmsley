@@ -101,10 +101,14 @@ produce_tp_plot <- function(tp_vec, rot_list, cm, act_vars_z, df){
   for (var in c("HR", "LowerCI", "UpperCI")) {
     rec_dat[, var] <- as.numeric(rec_dat[, var])
   }
+  # Print rec_dat with p vals in 
+  print(rec_dat)
 
   ## Make forest plot --------------------------------------------------------------
   ### This part is admin for labels etc --------------------------------------------
+  rec_dat$pval_overall_interaction <- NULL
   rec_dat$Model <- rec_dat$TimePeriod # This is just a quick hack to use the function designed elsewhere here
+  rec_dat$TimePeriod <- NULL
   rec_dat <- do_plot_admin(rec_dat, mod_levels = c(rev(names(tp_vec)), "overall"))
   rec_dat$TimePeriod <- rec_dat$Model
   rec_dat$all_p <- as.factor(rec_dat$TimePeriod == "overall")
@@ -143,7 +147,7 @@ produce_tp_plot <- function(tp_vec, rot_list, cm, act_vars_z, df){
   svg(
     paste0("plots/thesis-time-periods-", length(tp_vec), ".svg"), # chapter6_qba/additional-sensitivity-analyses
     width = 10,
-    height = 6
+    height = 7
   )
   print(p)
   dev.off()
