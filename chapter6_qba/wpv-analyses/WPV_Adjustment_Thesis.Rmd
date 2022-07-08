@@ -82,6 +82,14 @@ exc_rm <-
              "n excluded" = NA,
              "n remaining" = n)
 
+#--------------------
+df_rm <- df_rm[is.na(df_rm$file.startTime_s1)|(df_rm$file.startTime_s1 >= as.Date("2017-01-01")), ]
+exc_rm <- rbind(exc_rm, 
+  data.frame("Reason" = "s1 file appears erroneous",
+             "n excluded" = n - nrow(df_rm),
+             "n remaining" = nrow(df_rm)))
+n <- nrow(df_rm)
+
 #---------------------
 df_rm <- df_rm[df_rm$in_s0, ]
 exc_rm <- rbind(exc_rm, 
@@ -91,10 +99,6 @@ exc_rm <- rbind(exc_rm,
 n <- nrow(df_rm)
 
 #---------------------
-df_rm$any_valid_repeat <- df_rm$in_s1 |
-                                 df_rm$in_s2 | 
-                                 df_rm$in_s3 | 
-                                 df_rm$in_s4
 df_rm <- df_rm[df_rm$any_valid_repeat,]
 exc_rm <- rbind(exc_rm, data.frame("Reason" = "Missing/poor quality data for all repeats",
              "n excluded" = n - nrow(df_rm),
@@ -575,6 +579,14 @@ write.csv(vals, "plots/thesis-cox-coefs-with-meas-err-adjustment.csv")
 ```
 Note: provided the distribution is not too skewed the different methods to calculate the bootstrap should give similar estimates. If they do not that is a cause for concern and need to choose more carefully. 
 
+Fortunately in the grand scheme of things there is very little difference. 
+```{r}
+vals <- read.csv("plots/thesis-cox-coefs-with-meas-err-adjustment.csv")
+print(vals[, c("HR_Lower_CI", "HR_Lower_CI_percentile")])
+print(vals[, c("HR_Upper_CI", "HR_Upper_CI_percentile")])
+
+```
+
 ## Plots
 ```{r}
 cm <- epicoda::comp_mean(df, rot_list[[1]])
@@ -589,12 +601,12 @@ for (i in 1:length(rot_list)) {
   ilr_diff <- create_ref_vals(comp_name, cm)
   
   # Calculate HRs associated with difference
-  HRs <- as.double(vals[vals$Variable == var_name_pivot, 5:7]) ^ ilr_diff
+  HRs <- as.double(vals[vals$Variable == var_name_pivot, c("HR", "HR_Lower_CI", "HR_Upper_CI")]) ^ ilr_diff
   rec_dat[(i - 1) * 2 + 1,] <- c(comp_name, diff, "measurement_adjusted", HRs)
   rm(HRs)
   
   # Calculate HRs associated with difference unadjusted for measurement error
-  HRs <- as.double(vals_old[vals_old$Variable == var_name_pivot, 2:4]) ^ ilr_diff
+  HRs <- as.double(vals_old[vals_old$Variable == var_name_pivot, c("HR", "HR_Lower_CI", "HR_Upper_CI")]) ^ ilr_diff
   rec_dat[(i - 1) * 2 + 2,] <- c(comp_name, diff, "original", HRs)
   rm(HRs)
 }
@@ -607,7 +619,8 @@ for (var in c("HR", "LowerCI", "UpperCI")) {
 }
 
 write.csv(rec_dat, "plots/rec_dat_meas_error.csv") # This just saves so it's not a pain to get back if needed
-
+rec_dat <- read.csv("plots/rec_dat_meas_error.csv")
+rec_dat$X <- NULL
 
 ## Make forest plot --------------------------------------------------------------
 
