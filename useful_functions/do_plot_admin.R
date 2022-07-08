@@ -1,3 +1,4 @@
+# NOTE THIS FUNCTION IS VERY MUCH HARD CODED. 
 do_plot_admin <- function(rec_dat, mod_levels){
   # Label admin-----------------------------------------------------
   rec_dat$label <-
@@ -9,27 +10,54 @@ do_plot_admin <- function(rec_dat, mod_levels){
       round_2_dp(rec_dat$UpperCI),
       ")"
     )
+  behav_levs <- unique(rec_dat$Behaviour)
+  
   # Add title row-----------------------------------------------------
   rec_dat <- rbind(data.frame("Behaviour" = " ",  "Difference" = NA, "Model" = NA, "HR"= NA, "LowerCI" = NA, "UpperCI" = NA, "label" = "HR (CI)") , rec_dat)
   
   # Further label admin -------------------------------------------------
   rec_dat$Behaviour <-
-    factor(rec_dat$Behaviour, ordered = TRUE, levels = c(rot_list[[1]], " "))
-  rec_dat$BehaviourDet <- plyr::revalue(
+    factor(rec_dat$Behaviour, ordered = TRUE, levels = c(behav_levs, " "))
+  if ("SB" %in% behav_levs){
+    MVPA_diff <- as.double(unique(rec_dat$Difference[rec_dat$Behaviour == "MVPA"]))
+    LIPA_diff <- as.double(unique(rec_dat$Difference[rec_dat$Behaviour == "LIPA"]))
+    SB_diff <- as.double(unique(rec_dat$Difference[rec_dat$Behaviour == "SB"]))
+    sleep_diff <- as.double(unique(rec_dat$Difference[rec_dat$Behaviour == "sleep"]))
+      rec_dat$BehaviourDet <- plyr::revalue(
     rec_dat$Behaviour,
     c(
-      "MVPA" = "MVPA (extra 20 min/day)",
-      "LIPA" = "LIPA (extra 1 hr/day)",
-      "SB" = "SB (extra 1 hr/day)",
-      "sleep" = "Sleep (extra 1 hr/day)", 
+      "MVPA" = paste0("MVPA (extra ", MVPA_diff*24*60, " min/day)"),
+      "LIPA" = paste0("LIPA (extra ", LIPA_diff*24," hr/day)"),
+      "SB" = paste0("SB (extra ", SB_diff*24," hr/day)"),
+      "sleep" = paste0("Sleep (extra ", sleep_diff*24," hr/day)"),
       " " = " "
     )
   )
-  
+  }
+  if ("sedentary" %in% behav_levs){
+    MVPA_diff <- as.double(unique(rec_dat$Difference[rec_dat$Behaviour == "MVPA"]))
+    LIPA_diff <- as.double(unique(rec_dat$Difference[rec_dat$Behaviour == "light"]))
+    SB_diff <- as.double(unique(rec_dat$Difference[rec_dat$Behaviour == "sedentary"]))
+    sleep_diff <- as.double(unique(rec_dat$Difference[rec_dat$Behaviour == "sleep"]))
+
+    rec_dat$BehaviourDet <- plyr::revalue(
+      rec_dat$Behaviour,
+      c(
+        "MVPA" = paste0("MVPA (extra ", MVPA_diff*24*60, " min/day)"),
+        "light" = paste0("LIPA (extra ", LIPA_diff*24," hr/day)"),
+        "sedentary" = paste0("SB (extra ", SB_diff*24," hr/day)"),
+        "sleep" = paste0("Sleep (extra ", sleep_diff*24," hr/day)"),
+        " " = " "
+      )
+    )
+  }
+
+
+
   rec_dat$Model <-
-    factor(rec_dat$Model,
-           ordered = TRUE,
-           mod_levels)
+     factor(rec_dat$Model,
+            ordered = TRUE,
+            mod_levels)
   
 
   # Return final frame-----------------------------------------------------
