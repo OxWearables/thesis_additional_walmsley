@@ -22,7 +22,7 @@ library(ggplot2)
 # Locations of data and functions
 ```{r}
 input_loc <- "../../../../paperRW2021/"
-file_loc_local <- "../../useful_fuctions/"
+file_loc_local <- "../../useful_functions/"
 ```
 
 # Source functions 
