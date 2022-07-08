@@ -13,13 +13,16 @@ knitr::opts_chunk$set(echo = TRUE)
 name_of_current_run <- "selection_second_attempt"
 # NAME WHERE DATA IS
 input_loc <- "../../../../paperRW2021/"
+file_loc_local <- "../../useful_functions/"
 ```
 
 # Load packages
 ```{r}
 lapply(c("ggplot2", "survival", "table1", "mice"), library, character.only = TRUE)
-source("../../useful_functions/round_2_dp.R")
-source("../../useful_functions/consistent_theme.R")
+fl <- list.files(file_loc_local)
+for (file in fl){
+  try(source(paste0(file_loc_local, file)))
+}
 ```
 
 # Load data 
@@ -33,8 +36,9 @@ df_other <- readRDS("../../chapter3_ukb/outputs/processed_data_for_sel_bias.RDS"
 ```{r}
 vars_orig <- c("sex", "ethnicity", "smoking", "alcohol", "fruit_and_veg_cats", "red_and_processed_meat_cats", "oily_fish", "TownsendDeprIndexRecruit", "education_cats")
 vars_health_orig <- c("BMI", "poor_health", "meds")
-vars_sr_act <-   c("Self_reported_MPA",
-  "Self_reported_VPA", 
+vars_sr_act <-   c("Self_reported_MET_minutes_walking",
+                   "Self_reported_MET_minutes_MPA",
+                   "Self_reported_MET_minutes_VPA",
   "Job_involves_walking_standing",
   "Job_involves_activity", 
   "Self_reported_usual_walking_pace")
@@ -64,7 +68,7 @@ emp_status[grepl("In paid employment or self-employed", df_other$employed_i0)] <
 emp_status[!grepl("In paid employment or self-employed", df_other$employed_i0) & (grepl( "Retired|Looking after home and/or family|Unemployed|Unable to work because of sickness or disability|Doing unpaid or voluntary work|Full or part-time student", df_other$employed_i0))] <- "Not_employed"
 emp_status[!(emp_status %in% c("Employed", "Not_employed"))] <- NA
 
-for (var in vars_sr_act[3:4]){
+for (var in vars_sr_act[4:5]){
   df_other[, var][emp_status == "Not_employed"] <- "Not_in_employment"
   }
 ```
@@ -89,21 +93,30 @@ df_all$in_analytic_sample <- df_all$eid %in% df_in$eid
 Do some preprocessing to: 
 
 - ensure consistent treatment of missingness
-- put most frequent category as reference
 - visualise continuous variables and add a log-transformed version  
 ```{r}
 for (var in c("baseline_age", var_list_minus_age)){
+  
   print(var)
   df_all[, var][df_all[, var] == ""] <- NA
-  if (!(var %in% c("baseline_age", "BMI", "TownsendDeprIndexRecruit", vars_biom_tab_only, vars_sr_act[c(1, 2)]))){
-    tab <- as.data.frame(table(df_all[, var]))
-    ref <- as.character(tab$Var[tab$Freq == max(tab$Freq)])
-    df_all[, var] <- relevel(factor(df_all[, var]), ref = ref)
-  }
-  if (var %in% c("baseline_age", "BMI", "TownsendDeprIndexRecruit", vars_biom_tab_only, vars_sr_act[c(1, 2)])){
+  
+  # Relevel factors for modelling to make ref the largest category----------------------------------------------------------
+  if (!(var %in% c("baseline_age", "BMI", "TownsendDeprIndexRecruit", vars_biom_tab_only, vars_sr_act[c(1, 2, 3)]))){
+     tab <- as.data.frame(table(df_all[, var]))
+     ref <- as.character(tab$Var[tab$Freq == max(tab$Freq)])
+     df_all[, var] <- relevel(factor(df_all[, var]), ref = ref)
+   }
+  # No longer do this for ordered factors as will force factors to be ordered factors 
+  
+  # Examine distributions of continuous variables---------------------------------------------------------------------------
+  if (var %in% c("baseline_age", "BMI", "TownsendDeprIndexRecruit", vars_biom_tab_only, vars_sr_act[c(1, 2, 3)])){
+    
+    # Consider distribution of continuous variables ------------------------------------------------------------------------
     print(hist(as.numeric(df_all[, var]), main = var))
     print(hist(log(as.numeric(df_all[, var]) + .1), main = paste0("log(x+.1)" , var)))
     print(min(as.numeric(df_all[, var])))
+    
+    # Add log-transformed variables to data frame where may be appropriate (currently over-generous) -----------------------
     if (min(as.numeric(df_all[, var]), na.rm = TRUE) == 0){
       df_all[, paste0("log_1plus_", var)] <- log(as.numeric(df_all[, var]) + 1)
     } else {
@@ -112,14 +125,162 @@ for (var in c("baseline_age", var_list_minus_age)){
   }
 }
 df_all$baseline_age_ten_years <- as.double(df_all$baseline_age)/(365.25*10)
-df_all$Self_reported_MPA <- as.double(df_all$Self_reported_MPA)
-df_all$Self_reported_VPA <- as.double(df_all$Self_reported_VPA)
-df_all$Category_Self_reported_MPA <- cut(df_all$Self_reported_MPA, quantile(df_all$Self_reported_MPA, seq(0, 1, 0.2), na.rm = TRUE))
-df_all$Category_Self_reported_VPA <- cut(df_all$Self_reported_VPA, c(-1, 0.000000000000001, 10.000000000000000001, 20.00000000000001, 30.0000000000000001, 60.00000000000001, 1441))
 
+for (var in vars_sr_act[1:3]){
+  df_all[, var] <- as.double(df_all[, var])
+}
+
+df_all$Category_METmin_walking <-  cut(df_all$Self_reported_MET_minutes_walking, c(-1, 0.5, 500.5, 1000.5, 20000 ), labels = c("No walking", "1-500", "501-1000", "1001+"))
+df_all$Category_METmin_MPA <-  cut(df_all$Self_reported_MET_minutes_MPA, c(-1, 0.5, 500.5, 1000.5, 20000 ), labels = c("No moderate activity", "1-500", "501-1000", "1001+"))
+df_all$Category_METmin_VPA <-  cut(df_all$Self_reported_MET_minutes_VPA, c(-1, 0.5, 500.5, 1000.5, 20000 ), labels = c("No vigorous activity", "1-500", "501-1000", "1001+"))
+```
+
+I considered using the following code to force ordering of factors. However, on reflection this may excessively constrain the nature of the relationships between categories, and so for all imputation and modelling they will be treated as unordered. 
+```{r}
+# var_list_ordered_factors <-
+#   c("smoking",
+#     "alcohol",
+#     "fruit_and_veg_cats",
+#     "red_and_processed_meat_cats",
+#     "oily_fish",
+#     "education_cats",
+#     "poor_health",
+#     "meds",
+#     "Category_METmin_walking", 
+#     "Category_METmin_MPA",
+#     "Category_METmin_VPA", 
+#     "Job_involves_walking_standing",
+#     "Job_involves_activity",
+#     "Self_reported_usual_walking_pace"
+#     )
+# 
+# # This loop generates the model for the following code
+# for (var in var_list_ordered_factors){
+#   cat(paste0("df_all$", var ," <- factor(df_all$", var, ', ordered = TRUE, levels = c("', paste0(levels(df_all[, var]), collapse = '", "'), '"))'))
+# }
+# 
+# # Now amend this code to order correctly
+# df_all$smoking <-
+#   factor(
+#     df_all$smoking,
+#     ordered = TRUE,
+#     levels = c("Never", "Previous", "Current")
+#   )
+# df_all$alcohol <-
+#   factor(
+#     df_all$alcohol,
+#     ordered = TRUE,
+#     levels = c("Never", "< 3 times per week", "3+ times per week")
+#   )
+# df_all$fruit_and_veg_cats <-
+#   factor(
+#     df_all$fruit_and_veg_cats,
+#     ordered = TRUE,
+#     levels = c(
+#       "Less than 3 servings/day",
+#       "3-4.9 servings/day",
+#       "5-7.9 servings/day",
+#       "8+ servings/day"
+#     )
+#   )
+# df_all$red_and_processed_meat_cats <-
+#   factor(
+#     df_all$red_and_processed_meat_cats,
+#     ordered = TRUE,
+#     levels = c(
+#       "Less than 1 time/week",
+#       "1-2.9 times/week",
+#       "3-4.9 times/week",
+#       "5+ times/week"
+#     )
+#   )
+# df_all$oily_fish <-
+#   factor(
+#     df_all$oily_fish,
+#     ordered = TRUE,
+#     levels = c(
+#       "< 1 time/week",
+#       "1 time/week",
+#       "2-4 times/ week",
+#       "More than 4 times/week"
+#     )
+#   )
+# df_all$education_cats <-
+#   factor(
+#     df_all$education_cats,
+#     ordered = TRUE,
+#     levels = c(
+#       "School leaver",
+#       "Further, professional or vocational education",
+#       "Higher education"
+#     )
+#   )
+# df_all$poor_health <-
+#   factor(df_all$poor_health,
+#          ordered = TRUE,
+#          levels = c("FALSE", "TRUE"))
+# df_all$meds <-
+#   factor(df_all$meds,
+#          ordered = TRUE,
+#          levels = c("FALSE", "TRUE"))
+# df_all$Category_METmin_walking <-
+#   factor(
+#     df_all$Category_METmin_walking,
+#     ordered = TRUE,
+#     levels = c("No walking", "1-500", "501-1000", "1001+")
+#   )
+# df_all$Category_METmin_MPA <-
+#   factor(
+#     df_all$Category_METmin_MPA,
+#     ordered = TRUE,
+#     levels = c("No moderate activity", "1-500", "501-1000", "1001+")
+#   )
+# df_all$Category_METmin_VPA <-
+#   factor(
+#     df_all$Category_METmin_VPA,
+#     ordered = TRUE,
+#     levels = c("No vigorous activity", "1-500", "501-1000", "1001+")
+#   )
+# df_all$Job_involves_walking_standing <-
+#   factor(
+#     df_all$Job_involves_walking_standing,
+#     ordered = TRUE,
+#     levels = c(
+#       "Not_in_employment",
+#       "Never/rarely",
+#       "Sometimes",
+#       "Usually",
+#       "Always"
+#     )
+#   )
+# df_all$Job_involves_activity <-
+#   factor(
+#     df_all$Job_involves_activity,
+#     ordered = TRUE,
+#     levels = c(
+#       "Not_in_employment",
+#       "Never/rarely",
+#       "Sometimes",
+#       "Usually",
+#       "Always"
+#     )
+#   )
+# df_all$Self_reported_usual_walking_pace <-
+#   factor(
+#     df_all$Self_reported_usual_walking_pace,
+#     ordered = TRUE,
+#     levels = c(
+#       "Brisk pace",
+#       "Steady average pace",
+#       "Slow pace",
+#       "None of the above"
+#     )
+#   )
 ```
 
 Set up for logistic regression model: 
+
+- Note I have got rid of job involves walking/standing variables as they are not that helpful and are causing a mess for imputation because of logical dependencies
 ```{r}
 # List variables with log transformation where appropriate
 var_list_imp <-
@@ -135,13 +296,14 @@ var_list_imp <-
     "oily_fish",
     "TownsendDeprIndexRecruit",
     "education_cats",
-    "log_BMI",
+    "BMI",
     "poor_health",
     "meds",
-    "Category_Self_reported_MPA",
-    "Category_Self_reported_VPA",
-    "Job_involves_walking_standing",
-    "Job_involves_activity",
+    "Category_METmin_walking", 
+    "Category_METmin_MPA",
+    "Category_METmin_VPA", 
+  #  "Job_involves_walking_standing",
+  #  "Job_involves_activity",
     "Self_reported_usual_walking_pace",
     "Systolic_blood_pressure",
     "log_HbA1c",
@@ -150,7 +312,18 @@ var_list_imp <-
     "HDL_cholesterol",
     "log_Triglycerides"
   )
-print(paste0(var_list_imp[2:length(var_list_imp)], collapse = "+")) # get the variables for use in models
+
+# Check ordering of factors has worked (needed for imputation)
+for (var in var_list_imp){
+  print(var)
+  print(class(df_all[, var]))
+  if ("factor" %in% class(df_all[, var])){
+    print(is.ordered(df_all[, var]))
+  }
+} 
+
+# Print sum of variables to use
+var_sum <- paste0(var_list_imp[2:length(var_list_imp)], collapse = "+") # get the variables for use in models
 ```
 
 Imputation: 
@@ -159,29 +332,30 @@ print(Sys.time())
 imp <-
   parlmice(
     df_all[, var_list_imp],
-    n.core = 6,
-    m = 6,
+    m = 5,
+    n.core = 5, 
     n.imp.core = 1,
     print = F
   ) # parlmice is a parallelised version of mice
-writeRDS(imp, "imputed_dataset.RDS")
+saveRDS(imp, "imputed_dataset.RDS")
+
+imp <- readRDS("imputed_dataset.RDS")
 print(Sys.time())
+```
+
+Look at properties of imputation: 
+```{r}
+plot(imp)
 ```
 
 Model in whole dataset: 
 ```{r}
-# Do model in whole dataset
+# Do model for each imputed dataset
 log_inc <-
   with(
     imp,
     glm(
-      in_analytic_sample ~ baseline_age_ten_years + sex + ethnicity + smoking +
-        alcohol + fruit_and_veg_cats + red_and_processed_meat_cats + oily_fish +
-        TownsendDeprIndexRecruit + education_cats + log_BMI + poor_health + meds +
-        Category_Self_reported_MPA + Category_Self_reported_VPA + Job_involves_walking_standing +
-        Job_involves_activity + Self_reported_usual_walking_pace + Systolic_blood_pressure +
-        log_HbA1c + log_C_Reactive_Protein + LDL_cholesterol + HDL_cholesterol +
-        log_Triglycerides,
+      as.formula(paste0("in_analytic_sample ~ ", var_sum)),
       family = binomial
     )
   )
@@ -218,19 +392,44 @@ Do logistic regression model in each imputed dataset:
 lp_glm <- data.frame(matrix(nrow = nrow(df_all), ncol = 0)) # set up dataframe to record
 
 # Do logistic regression model in each dataset and predict from it
-for (i in 1:6){
+for (i in 1:5){
+  
+  # Get out dataset from imp object
   loc_dat <- complete(imp, i)
   print(nrow(loc_dat))
+  
+  # Generate model 
   loc_glm <-glm(
-    in_analytic_sample ~ baseline_age_ten_years + sex + ethnicity + smoking +
-        alcohol + fruit_and_veg_cats + red_and_processed_meat_cats + oily_fish +
-        TownsendDeprIndexRecruit + education_cats + log_BMI + poor_health + meds +
-        log_1plus_Self_reported_MPA + log_1plus_Self_reported_VPA + Job_involves_walking_standing +
-        Job_involves_activity + log_Systolic_blood_pressure + log_HbA1c + log_C_Reactive_Protein +
-        log_LDL_cholesterol + log_HDL_cholesterol + log_Triglycerides,
+    as.formula(paste0("in_analytic_sample ~ ", var_sum)),
     family = binomial, data = loc_dat)
-  loc_p <- predict(loc_glm, newdata =loc_dat, type = "link")
-  lp_glm[, paste0("lp_", i)] <- loc_p
+  loc_p <- predict(loc_glm, newdata =loc_dat, type = "link") # Predict on link scale 
+  lp_glm[, paste0("lp_", i)] <- loc_p # Merge in to recording data frame
+  
+  # Consider model assumptions
+  cat("max VIF:", max(car::vif(loc_glm))) ## variance inflation
+  # The large VIFs are to do with the two variables 
+  
+  ## Consider whether the logit as a linear function of the variable looks reasonable
+  # num_vars <-   c( 
+  #   "baseline_age_ten_years",
+  #   "BMI",
+  #   "Systolic_blood_pressure",
+  #   "log_HbA1c",
+  #   "log_C_Reactive_Protein",
+  #   "LDL_cholesterol",
+  #   "HDL_cholesterol",
+  #   "log_Triglycerides"
+  # )
+  # for (var in num_vars){ 
+  #  loc_dat$loc_p <- loc_p
+  #  plot <- ggplot(loc_dat, aes_string(var, "loc_p"))+
+  #    geom_point(alpha = 0.05) + 
+  #    geom_smooth(method = "loess", se = FALSE) + 
+  #    labs(title = var)
+  #  print(plot)
+  # }
+  
+  # Tidy up after ourselves
   rm(loc_dat, loc_glm, loc_p)
 }
 
@@ -271,9 +470,11 @@ Set up variables for table:
 ```{r}
 df_in$pa <- df_in$acc.overall.avg
 df_in$age_entry_years <- as.double(df_in$age_entry)/365.25
-df_in <- merge(df_in, df_all[, c("eid", vars_biom_tab_only, vars_sr_act)], all.x = TRUE)
+df_in <- merge(df_in, df_all[, c("eid", vars_biom_tab_only, vars_sr_act,  "Category_METmin_walking", 
+    "Category_METmin_MPA",
+    "Category_METmin_VPA", 
+    "Self_reported_usual_walking_pace")], all.x = TRUE)
 df_in$inverse_wt_quarters <- cut(df_in$inverse_wt_stab_trim, quantile(df_in$inverse_wt_stab_trim), c("Q1 - Lowest weight", "Q2", "Q3", "Q4 - Highest weight"))
-
 
 # Units
 units(df_in$age_entry_years) <- "years"
@@ -283,6 +484,9 @@ units(df_in$BMI) <- "kg/m^2"
 units(df_in$LDL_cholesterol) <- "mmol/L"
 units(df_in$HDL_cholesterol) <- "mmol/L"
 units(df_in$Triglycerides) <- "mmol/L"
+units(df_in$Category_METmin_walking) <- "MET minutes"
+units(df_in$Category_METmin_MPA) <- "MET minutes"
+units(df_in$Category_METmin_VPA) <- "MET minutes"
 
 
 # Labels
@@ -301,7 +505,10 @@ label(df_in$meds) <- "Medications for diabetes, cholesterol or blood pressure"
 label(df_in$BMI) <- "BMI"
 
 # Column labels
-for (var in c(vars_sr_act, vars_biom_tab_only)) {
+for (var in c(vars_sr_act, vars_biom_tab_only, "Category_METmin_walking", 
+    "Category_METmin_MPA",
+    "Category_METmin_VPA", 
+    "Self_reported_usual_walking_pace")) {
   label(df_in[, var]) <- gsub("_", " ", var)
 }
 
@@ -309,7 +516,17 @@ for (var in c(vars_sr_act, vars_biom_tab_only)) {
 
 Prep variables for table:
 ```{r}
-vs <- c("pa", "age_entry_years", var_list_minus_age)
+vs <-
+  c(
+    "pa",
+    "age_entry_years",
+    vars_orig,
+    vars_health_orig,
+    vars_biom_tab_only,
+    "Category_METmin_walking",
+    "Category_METmin_MPA",
+    "Category_METmin_VPA",
+    "Self_reported_usual_walking_pace")
 vars_table_labels <- as.list(rep(NA, times = length(vs)))
 for (i in 1:length(vs)) {
     var <- vs[i]
@@ -396,7 +613,7 @@ for (i in 1:length(rot_list)) {
   comp_name <- names(rot_list)[i]
 
   # set up for later looking at transformation-----------------
-  get_diff(comp_name)
+  diff <- get_diff(comp_name)
   ilr_diff <- create_ref_vals(comp_name, cm)
 
   # do transformation-----------------------------------------
@@ -406,6 +623,7 @@ for (i in 1:length(rot_list)) {
 
   # make new data with these variables------------------------
   loc <- cbind(df_in, piv_c)
+
 
   # basic cox model-------------------------------------------
   cox_mod_simple <- coxph(
@@ -421,6 +639,7 @@ for (i in 1:length(rot_list)) {
   HRs <- calc_HRs(model = cox_mod_simple, row = "piv1", ilr_diff = ilr_diff)
   rec_dat[(i - 1) * 2 + 1,] <- c(comp_name, diff, "unweighted", HRs)
   rm(HRs)
+  
   
   # Weighted Cox model---------------------------------------- 
   cox_mod_weighted <- coxph(
@@ -516,12 +735,12 @@ exp(cw[["ethnicityBlack"]])
 ```
 
 
-An even starker example: look at smoking and fail to adjust for sex (or anything else in fact)
+An even starker example: look at pa fail to adjust for sex (or anything else in fact)
 ```{r}
-cox_mod_rcheck1 <- coxph(Surv(age_entry, age_exit, CVD_event) ~ smoking, weights = inverse_wt_stab_trim,
+cox_mod_rcheck1 <- coxph(Surv(age_entry, age_exit, CVD_event) ~ BMI_cats, weights = df_in$inverse_wt_stab_trim,
     data = df_in, id = eid, robust = TRUE )
   
-cox_mod_rcheck2 <- coxph(Surv(age_entry, age_exit, CVD_event) ~ smoking, data = df_in)
+cox_mod_rcheck2 <- coxph(Surv(age_entry, age_exit, CVD_event) ~ BMI_cats, data = df_in)
 
 print(summary(cox_mod_rcheck1))
 print(summary(cox_mod_rcheck2))
