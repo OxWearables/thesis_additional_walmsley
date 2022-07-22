@@ -1,0 +1,547 @@
+---
+title: "Within-person variation analyses for thesis"
+author: "R-Walmsley"
+date: "29/03/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Note location of input files
+```{r}
+file_loc <- "../../../repeatedMeasurements/R/"
+file_loc_local <- "../../useful_functions/"
+input_loc <- "../../../../paperRW2021/"
+input_loc_rm <- "../../../repeatedMeasurementsProcessing/data/59070/"
+```
+
+
+# Load packages
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+library(survival)
+library(ggplot2)
+library(data.table)
+library(table1)
+library(knitr)
+```
+
+# Prepare functions for use in adjustment 
+```{r message=FALSE, results='hide'}
+fl <- list.files(file_loc)
+for (file in fl){
+  try(source(paste0(file_loc, file)))
+}
+# Sourcing functions from another project - to be replaced with install_github
+```
+
+# Load helpers
+```{r results = 'hide'}
+fl <- list.files(file_loc_local)
+for (file in fl){
+  try(source(paste0(file_loc_local, file)))
+}
+```
+
+# Read in data 
+Read in main data:
+```{r}
+# Prepped UKB data
+df <- readRDS(paste0(input_loc, "epiAnalysis/inputData/2021-06-17check_messages_ready_to_use.RDS"))
+```
+
+Read in repeated measurements sample:
+```{r}
+df_rm <-
+  data.frame(data.table::fread(paste0(input_loc_rm, "summary_data_all_with_5sec_epoch_and_ml_oct21.csv")))
+```
+
+# Add in month of baseline assessment
+```{r}
+df$month_of_year <- factor(lubridate::month(df$StartTimWear, label = TRUE), ordered = FALSE)
+```
+
+# Add in season indicator
+```{r}
+df$day_of_year <- lubridate::yday(df$StartTimWear)
+```
+[QC: I manually checked a few values]
+
+NB: there are no leap years during measurement period which saves a headache
+
+```{r}
+df$day_of_year_rel_winter_solstice <- (df$day_of_year - 355) %% 365 # day of year modulo 365
+df$angle_in_year <- (df$day_of_year_rel_winter_solstice/365)*2*pi # angle in radians
+df$season_component1 <- cos(df$angle_in_year)
+df$season_component2 <- sin(df$angle_in_year)
+```
+
+Check this has worked as expected: 
+```{r}
+ggplot(df, aes(day_of_year_rel_winter_solstice, season_component1)) + 
+  geom_point() + 
+  geom_point(aes(day_of_year_rel_winter_solstice, season_component2), colour = "red")
+```
+
+# Quality at each repeat
+```{r}
+for (i in 0:4){
+  good_data_cond <- (!(is.na(df_rm[, paste0("acc.overall.avg_s", i)]))) &
+                  (df_rm[, paste0("quality.goodCalibration_s", i)] == 1) & 
+                  (df_rm[, paste0("quality.goodWearTime_s", i)] == 1) & 
+                  (df_rm[, paste0("clipsBeforeCalibration_s", i)] < 0.01*df_rm[, paste0("totalReads_s", i)]) & 
+                  (df_rm[, paste0("clipsAfterCalibration_s", i)] < 0.01*df_rm[, paste0("totalReads_s", i)]) & 
+                  (df_rm[, paste0("acc.overall.avg_s", i)] <100)
+  df_rm[, paste0("in_s", i)] <- ifelse(good_data_cond, TRUE, FALSE)
+}
+df_rm$any_valid_repeat <- df_rm$in_s1 |
+                                 df_rm$in_s2 | 
+                                 df_rm$in_s3 | 
+                                 df_rm$in_s4
+```
+
+# Exclusions in repeated measures data
+```{r}
+n <- nrow(df_rm)
+exc_rm <-
+  data.frame("Reason" = "Starting Number",
+             "n excluded" = NA,
+             "n remaining" = n)
+
+#--------------------
+df_rm <- df_rm[is.na(df_rm$file.startTime_s1)|(df_rm$file.startTime_s1 >= as.Date("2017-01-01")), ]
+exc_rm <- rbind(exc_rm, 
+  data.frame("Reason" = "s1 file appears erroneous",
+             "n excluded" = n - nrow(df_rm),
+             "n remaining" = nrow(df_rm)))
+n <- nrow(df_rm)
+
+#---------------------
+df_rm <- df_rm[df_rm$in_s0, ]
+exc_rm <- rbind(exc_rm, 
+  data.frame("Reason" = "Missing baseline",
+             "n excluded" = n - nrow(df_rm),
+             "n remaining" = nrow(df_rm)))
+n <- nrow(df_rm)
+
+#---------------------
+df_rm <- df_rm[df_rm$any_valid_repeat,]
+exc_rm <- rbind(exc_rm, data.frame("Reason" = "Missing/poor quality data for all repeats",
+             "n excluded" = n - nrow(df_rm),
+             "n remaining" = nrow(df_rm)))
+n <- nrow(df_rm)
+
+
+#---------------------
+df_rm <- df_rm[df_rm$eid %in% df$eid,]
+exc_rm <- rbind(exc_rm, 
+  data.frame("Reason" = "Not in final analytic sample",
+             "n excluded" = n - nrow(df_rm),
+             "n remaining" = nrow(df_rm)))
+
+
+#---------------------
+print(exc_rm)
+```
+
+
+# Repeated measurements data prep
+- Add ilr transformed variables:
+```{r}
+# List of elements -----------------------------------------------------------------------------------------------------------
+rot_list <- list(
+  "sleep" = c("sleep", "sedentary", "light", "MVPA"),
+  "sedentary" = c("sedentary", "sleep", "light", "MVPA"),
+  "light" = c("light", "sleep", "sedentary",  "MVPA"),
+  "MVPA" = c("MVPA", "sleep", "sedentary", "light")
+) 
+
+# The class labels in the repeated measurements dataset are different to in the main dataset, so relabel the main dataset to match the repeated measurements dataset ---------------------------------------------------------------------------------------------------------
+df$sedentary <- df$SB
+df$light <- df$LIPA
+for (var in rot_list[[1]]){
+  df[, paste0(var, "_ML4_red_s0")] <- df[, var]
+}
+
+
+# Cycle through different first pivot coordinates adding in the set of pivot coordinates with this first pivot coordinate----------------------
+for (j in 1:length(rot_list)){
+  for (i in 0:4){
+    # Add in transformed variables for each repeat----------------------
+    comp_labels <- paste0(rot_list[[j]], "_ML4_red_s", i)
+    tl <- epicoda::transf_labels(comp_labels, transformation_type = "ilr")
+  
+    # Det limit for zero imputation------------------------------------
+    dl <- min(df$MVPA[df$MVPA>0]) # This is coming from the main study as a better overall source
+    
+    # Set up a mask for rows which will not appear----------------------
+    df_rm[, paste0(tl, i)] <- NA
+    inc_ind <- !(df_rm[, paste0("excluded_s", i)]) & !(is.na(df_rm[, paste0("excluded_s", i)]))
+
+    # Do and store transformation---------------------------------------
+    d <- epicoda::transform_comp(df_rm[inc_ind, ], comp_labels = comp_labels, det_limit = dl)[, tl]
+
+    # Put these back in the data frame with a label for the repeat-----
+    df_rm[inc_ind, paste0(tl, "_s", i)] <-  d
+    df_rm[, paste0(names(rot_list)[j], c("z1", "z2", "z3"), "_s", i)] <- df_rm[, paste0(tl, "_s", i)]
+    
+    # Only on the first repeat, also transform the data in the main dataset-------------
+    if (i == 0){
+      d2 <- epicoda::transform_comp(df, comp_labels = comp_labels, det_limit = dl)[, tl]
+      df[, paste0(names(rot_list)[j], c("z1", "z2", "z3"), "_s", i)] <- d2[, tl]
+    }
+
+  }
+}
+
+# Note that the labelling of columns is a little weird - MVPAz2_s0 refers to z2 for the case where MVPA was the pivot at repeat 0
+```
+
+# Descriptive table for repeated measurements data 
+- Preprocessing
+```{r}
+# FORMAT AS DATE WHERE NEEDED
+for (i in 0:4) {
+  df_rm[, paste0("file_start_s", i)] <-
+    as.Date(df_rm[, paste0("file.startTime_s", i)])
+}
+
+# MERGE IN SOME DATA
+nrow(df_rm)
+df_rm <- merge(df_rm, df[, c("eid", colnames(df)[!(colnames(df) %in% colnames(df_rm))])], by = "eid", sort = FALSE)
+nrow(df_rm)
+
+# SET UP VARS TO PROCESS
+vars_list <- list(
+  "Wear date" = "file_start_s",
+  "Overall average acceleration (mg)" = "acc.overall.avg_s",
+  "ML moderate-to-vigorous physical activity (hr/day)" = "MVPA_ML4_red_s",
+  "ML light physical activity (hr/day)" = "light_ML4_red_s" ,
+  "ML sedentary behaviour (hr/day)" = "sedentary_ML4_red_s",
+  "ML sleep (hr/day)" = "sleep_ML4_red_s",
+  "First pivot coordinate: MVPA vs rest" = "MVPAz1_s",
+  "First pivot coordinate: LIPA vs rest" = "lightz1_s",
+  "First pivot coordinate: SB vs rest" = "sedentaryz1_s",
+  "First pivot coordinate: sleep vs rest" = "sleepz1_s"
+  
+)
+```
+
+Make table:
+```{r}
+# SET UP DATA FRAME
+tab_out <-
+  data.frame(
+    "Variable" = rep(NA, times = length(vars_list) + 1),
+    "Original (Repeat 0)" = rep(NA, times = length(vars_list) + 1),
+    "Repeat 1" = rep(NA, times = length(vars_list) + 1) ,
+    "Repeat 2" = rep(NA, times = length(vars_list) + 1) ,
+    "Repeat 3" = rep(NA, times = length(vars_list) + 1),
+    "Repeat 4" = rep(NA, times = length(vars_list) + 1),
+    "Lambda (SE)" = rep(NA, times = length(vars_list) + 1)
+  )
+
+# ADD VALUES INTO DATA FRAME
+tab_out[1, "Variable"] <- "n"
+
+for (i in 0:4) {
+  dmin <- df_rm[df_rm[, paste0("in_s", i)], ]
+  rel_col <- grep(i, colnames(tab_out))
+  
+  
+  # Add in number of participants
+  tab_out[1, rel_col] <- nrow(dmin)
+  
+  
+  # Iterate over variables
+  for (j in 1:length(vars_list)) {
+    # Pull details
+    name_var <- names(vars_list)[j]
+    var <- paste0(vars_list[[j]], i)
+    varclean <- sub("_s0", "", var)
+    
+    # Do calculations that only needed once
+    if (i == 0) {
+      # Assign details of var to var col
+      tab_out[(1 + j), "Variable"] <- name_var
+      print(varclean)
+      if (!(varclean %in% c("file_start", "n"))) {
+        print("here")
+        lambda_lin <-
+          calc_lambda(varclean,
+                      data = df_rm,
+                      covariates = c("sex", "age_entry"))
+        lambda_lin_month_of_year <-
+          calc_lambda(
+            varclean,
+            data = df_rm,
+            covariates = c("sex", "age_entry", "month_of_year")
+          )
+        lambda_lin_season_indic <-
+          calc_lambda(
+            varclean,
+            data = df_rm,
+            covariates = c("sex", "age_entry", "season_component1", "season_component2")
+          )
+        tab_out[(1 + j), c(c(
+          "Lambda (SE)",
+          "Lambda (SE) with month",
+          "Lambda (SE) with season"
+        ))] <-
+          c(
+            paste0(round_3_dp(lambda_lin[[1]]),
+                   " (",
+                   round_3_dp(sqrt(lambda_lin[[2]])),
+                   ")"),
+            paste0(
+              round_3_dp(lambda_lin_month_of_year[[1]]),
+              " (",
+              round_3_dp(sqrt(lambda_lin_month_of_year[[2]])),
+              ")"
+            ),
+            paste0(
+              round_3_dp(lambda_lin_season_indic[[1]]),
+              " (",
+              round_3_dp(sqrt(lambda_lin_season_indic[[2]])),
+              ")"
+            )
+          )
+      } else {
+        tab_out[(1 + j), c("Lambda (SE)",
+                           "Lambda (SE) with month",
+                           "Lambda (SE) with season")] <- c("NA", "NA", "NA")
+      }
+    }
+    
+    # Rescale data as needed
+    if (grepl("hr/day", name_var)) {
+      dmin$temp <- dmin[, var] * 24
+    }
+    else if (grepl("min/day", name_var)) {
+      dmin$temp <- dmin[, var] * 24 * 60
+    }
+    else {
+      dmin$temp <- dmin[, var]
+    }
+    
+    # Treat date classes separately as quantile function doesn't work
+    if (inherits(dmin$temp, "Date")) {
+      dmin$temp <- as.numeric(dmin$temp)
+      quants <- quantile(dmin$temp, c(0.25, 0.5, 0.75))
+      qround <- as.Date(quants, origin = "1970-01-01")
+    }
+    
+    # Otherwise:
+    else{
+      quants <- quantile(dmin$temp, c(0.25, 0.5, 0.75))
+      if (grepl("VPA|z1", var)) {
+        qround <- round_2_dp(quants)
+      }
+      else{
+        qround <- round_1_dp(quants)
+      }
+    }
+    
+    
+    val <- paste0(qround[2], " (", qround[1], ", ", qround[3], ")")
+    tab_out[(1 + j), rel_col] <- val
+    
+  }
+}
+tab_out$Lambda..SE. <- NULL
+
+tab_out
+```
+
+
+# Multivariable regression calibration procedure
+Compare with and without season adjustment
+```{r}
+coefs <- data.frame(matrix(nrow = 1, ncol = 0))
+
+for (var in names(rot_list)) {
+  # Find names of variables
+  form_vars <-
+    colnames(df_rm)[grepl(paste0(var, "z"), colnames(df_rm))]
+  form_vars <- unique(gsub("_(.*)", "", form_vars))
+  
+  # Make all predictive models
+  # WITHOUT SEASON
+  models_list <- calc_models_multi(
+    var_names = form_vars,
+    data = df_rm,
+    suffix_baseline = "_s0",
+    suffix_rep = c("_s1", "_s2", "_s3", "_s4"),
+    exclusion_indic = "excluded",
+    covariates = c("age_entry", "sex", "ethnicity", "smoking", "alcohol", "fruit_and_veg_cats", "oily_fish", "red_and_processed_meat_cats", "education_cats", "TDI_quartiles")
+  )
+  
+  # WITH SEASON INDIC
+  models_list_month_of_year <- calc_models_multi(
+    var_names = form_vars,
+    data = df_rm,
+    suffix_baseline = "_s0",
+    suffix_rep = c("_s1", "_s2", "_s3", "_s4"),
+    exclusion_indic = "excluded",
+    covariates = c("age_entry", "sex", "ethnicity", "smoking", "alcohol", "fruit_and_veg_cats", "oily_fish", "red_and_processed_meat_cats", "education_cats", "TDI_quartiles", "month_of_year")
+  )
+  
+    models_list_season_indic <- calc_models_multi(
+    var_names = form_vars,
+    data = df_rm,
+    suffix_baseline = "_s0",
+    suffix_rep = c("_s1", "_s2", "_s3", "_s4"),
+    exclusion_indic = "excluded",
+    covariates = c("age_entry", "sex", "ethnicity", "smoking", "alcohol", "fruit_and_veg_cats", "oily_fish", "red_and_processed_meat_cats", "education_cats", "TDI_quartiles", "season_component1", "season_component2")
+  )
+  
+  # Make predictions
+  pred_data <-
+    pred_rep(models_list, newdata = df, suffix_pred = "_pred")
+  pred_data_month_of_year <-
+    pred_rep(models_list_month_of_year, newdata = df, suffix_pred = "_pred")
+  pred_data_season_indic <- 
+    pred_rep(models_list_season_indic, newdata = df, suffix_pred = "_pred")
+  
+  # Variables for new calculation
+  form_vars_new <- paste0(form_vars, "_pred")
+  form_sum <- paste0(form_vars_new, collapse = "+")
+  
+  # Cox model
+  cox_mod <-
+    coxph(formula(
+      paste0(
+        "Surv(age_entry, age_exit, CVD_event) ~ ",
+        form_sum,
+        "+ strata(sex)+
+  ethnicity + smoking + alcohol + fruit_and_veg_cats + oily_fish + red_and_processed_meat_cats + education_cats + TDI_quartiles"
+      )
+    ), data = pred_data)
+  
+  cox_mod_month_of_year <-
+    coxph(formula(
+      paste0(
+        "Surv(age_entry, age_exit, CVD_event) ~ ",
+        form_sum,
+        "+ strata(sex)+
+  ethnicity + smoking + alcohol + fruit_and_veg_cats + oily_fish + red_and_processed_meat_cats + education_cats + TDI_quartiles"
+      )
+    ), data = pred_data_month_of_year)
+  
+
+  cox_mod_season_indic <-
+    coxph(formula(
+      paste0(
+        "Surv(age_entry, age_exit, CVD_event) ~ ",
+        form_sum,
+        "+ strata(sex)+
+  ethnicity + smoking + alcohol + fruit_and_veg_cats + oily_fish + red_and_processed_meat_cats + education_cats + TDI_quartiles"
+      )
+    ), data = pred_data_season_indic)
+  
+  # Assign Cox model, outputs
+  coef <- summary(cox_mod)$coefficients[1, 1]
+  se <- summary(cox_mod)$coefficients[1, 3]
+  coefs[, paste0(var, "_pivot1_noseas_", c("HR", "HR_Lower_CI", "HR_Upper_CI"))] <-
+     exp(c(coef, coef - 1.96*se, coef + 1.96*se))
+  rm(coef, se)
+  
+  coef <- summary(cox_mod_month_of_year)$coefficients[1, 1]
+  se <- summary(cox_mod_month_of_year)$coefficients[1, 3]
+  coefs[, paste0(var, "_pivot1_month_of_year_", c("HR", "HR_Lower_CI", "HR_Upper_CI"))] <- exp(c(coef, coef - 1.96*se, coef + 1.96*se))
+  rm(coef, se)
+  
+  
+  coef <- summary(cox_mod_season_indic)$coefficients[1, 1]
+  se <- summary(cox_mod_season_indic)$coefficients[1, 3]
+  coefs[, paste0(var, "_pivot1_season_indic_", c("HR", "HR_Lower_CI", "HR_Upper_CI"))] <- exp(c(coef, coef - 1.96*se, coef + 1.96*se))
+  rm(coef, se)
+}
+```
+
+Calc HRs:
+```{r}
+cm <- epicoda::comp_mean(df, rot_list[[1]])
+
+rec_dat <- make_rec_dat_frame(12)
+for (i in 1:length(rot_list)) {
+  comp_name <- names(rot_list)[i]
+  var_name_noseas <- paste0(comp_name, "_pivot1_noseas_")
+  var_name_month_of_year <- paste0(comp_name, "_pivot1_month_of_year_")
+  var_name_season_indic <- paste0(comp_name, "_pivot1_season_indic_")
+  
+  # set up for looking at transformation
+  diff <- get_diff(comp_name)
+  ilr_diff <- create_ref_vals(comp_name, cm)
+  
+  # Calculate HRs associated with difference
+  HRs <- as.double(coefs[, paste0(var_name_noseas, c("HR", "HR_Lower_CI", "HR_Upper_CI"))]) ^ ilr_diff
+  rec_dat[(i - 1) * 3 + 1,] <- c(comp_name, diff, "without_season", HRs)
+  rm(HRs)
+  
+  HRs <- as.double(coefs[, paste0(var_name_month_of_year, c("HR", "HR_Lower_CI", "HR_Upper_CI"))]) ^ ilr_diff
+  rec_dat[(i - 1) * 3 + 2,] <- c(comp_name, diff, "month_of_year", HRs)
+  rm(HRs)
+  
+  
+  HRs <- as.double(coefs[, paste0(var_name_season_indic, c("HR", "HR_Lower_CI", "HR_Upper_CI"))]) ^ ilr_diff
+  rec_dat[i * 3,] <- c(comp_name, diff, "season_indicator", HRs)
+  rm(HRs)
+}
+
+print(rec_dat)
+```
+
+So we've shown whether you adjust for month/season doesn't make a huge difference. Why not? 
+ 
+Variability due to season swamped by other sources of variability? 
+
+How to assess this??
+
+Idea: look just in the baseline data. There's a certain amount of variability. We've shown this is approximately 2/3 between individual variation, 1/3 within-individual variation.
+
+How much is seasonal variation (assumed to contribute to the within individual portion): 
+```{r}
+tab_rsquared <- data.frame("outcome" = rep(NA, times = 16), "explan_var" = rep(NA, times = 16), "total_var_outcome" = rep(NA, times = 16), "prop_variance_explained" = rep(NA, times = 16))
+for (i in 1:8){
+  outcome <- paste0(vars_list[i+2], "0")
+  model <- lm(as.formula(paste0(outcome, "~ month_of_year")), df)
+  print(outcome)
+ # print(summary(model)$coefficients)
+  if (grepl("ML4", outcome)){
+    var_outcome <- var(df[, outcome]*24)
+    print(summary(model)$coefficients[, c(1, 2)]*24*60)
+  } else{
+    var_outcome <- var(df[, outcome])
+  }
+  rsquaredmonth <- summary(model)$r.squared
+  tab_rsquared[(i-1)*2 + 1, ] <- c(outcome, "month_of_year", var_outcome, rsquaredmonth)
+  rm(model)
+  
+  model <- lm(as.formula(paste0(outcome, "~ season_component1 + season_component2")), df)
+  print(outcome)
+ # print(summary(model)$coefficients)
+  rsquaredseasonindic <- summary(model)$r.squared
+  tab_rsquared[i*2, ] <- c(outcome, "season_indic", var_outcome, rsquaredseasonindic)
+  rm(model)
+}
+
+tab_rsquared
+```
+
+This is really really small proportion of variance being explained by season. Up to around 1% of overall variance, i.e. up to about 3-4% of within-individual variance. This is surprisingly small!
+
+If you inspect models, do results seem reasonable: 
+
+e.g. in June compared to Jan (ignoring issues of correct functional form as this should be less of a problem with comp data but these are harder to interpret ): 
+
+- nearly half an hour more light pa
+- 7 minutes more MVPA 
+- 9 minutes less SB 
+- nearly half an hour less sleep
+
+Why do these contribute so little to the overall variance??
+
+- these are the extremes: most people are much less at extremes than this
+- there's just a lot of variance overall??
