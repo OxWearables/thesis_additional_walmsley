@@ -14,7 +14,7 @@ knitr::opts_chunk$set(echo = TRUE)
 file_loc <- "../../../repeatedMeasurements/R/"
 file_loc_local <- "../../useful_functions/"
 input_loc <- "../../../../paperRW2021/"
-input_loc_rm <- "../../../repeatedMeasurementsStudy/"
+input_loc_rm <- "../../../repeatedMeasurementsProcessing/data/59070/"
 ```
 
 
@@ -54,7 +54,7 @@ df <- readRDS(paste0(input_loc, "epiAnalysis/inputData/2021-06-17check_messages_
 Read in repeated measurements sample:
 ```{r}
 df_rm <-
-  data.frame(data.table::fread(paste0(input_loc_rm, "data/summary_data_all_with_5sec_epoch_and_ml.csv")))
+  data.frame(data.table::fread(paste0(input_loc_rm, "summary_data_all_with_5sec_epoch_and_ml_oct21.csv")))
 ```
 
 # Quality at each repeat
@@ -625,8 +625,8 @@ rec_dat$X <- NULL
 ## Make forest plot --------------------------------------------------------------
 
 ### This part is admin for labels etc --------------------------------------------
-rec_dat$Model[rec_dat$Model == "measurement_adjusted"] <- "measurement-adjusted"
-rec_dat <- do_plot_admin(rec_dat, mod_levels = c( "measurement-adjusted", "original"))
+rec_dat$Model[rec_dat$Model == "measurement_adjusted"] <- "adjusted for within-person variation"
+rec_dat <- do_plot_admin(rec_dat, mod_levels = c( "adjusted for within-person variation", "original"))
 my_cols <- get_cols(2)
 
 ### Make plot----------------------------------------------------------------------
