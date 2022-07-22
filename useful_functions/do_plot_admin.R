@@ -13,7 +13,7 @@ do_plot_admin <- function(rec_dat, mod_levels){
   behav_levs <- unique(rec_dat$Behaviour)
   
   # Add title row-----------------------------------------------------
-  rec_dat <- rbind(data.frame("Behaviour" = " ",  "Difference" = NA, "Model" = NA, "HR"= NA, "LowerCI" = NA, "UpperCI" = NA, "label" = "HR (CI)") , rec_dat)
+  rec_dat <- rbind(data.frame("Behaviour" = " ",  "Difference" = NA, "Model" = NA, "HR"= NA, "LowerCI" = NA, "UpperCI" = NA, "label" = "HR (CI)", "n_event" = NA, "n_participant" = NA) , rec_dat)
   
   # Further label admin -------------------------------------------------
   rec_dat$Behaviour <-
@@ -51,9 +51,19 @@ do_plot_admin <- function(rec_dat, mod_levels){
       )
     )
   }
-
-
-
+  
+  # Add n_event to caption if non zero ------------------------------------
+  if (!is.na(rec_dat$n_event[nrow(rec_dat)])){
+    for ( i in 1:length(mod_levels)){
+      this_lev <- mod_levels[i]
+      number_events <- formatC(as.numeric(rec_dat$n_event[which(rec_dat$Model == this_lev)][1]), big.mark = ",")
+      print(number_events)
+      mod_levels[i] <- paste0(this_lev, "\n (", number_events, " events)")
+      rec_dat$Model[rec_dat$Model == this_lev] <- mod_levels[i]
+  }
+  }
+  
+  # Reorder model
   rec_dat$Model <-
      factor(rec_dat$Model,
             ordered = TRUE,
