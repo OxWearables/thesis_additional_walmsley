@@ -575,8 +575,7 @@ my_render_cont <- function(x){
 Write table:
 ```{r}
 tab_wts <-
-  table1(c(list("Overall" = df_in), 
-                split(df_in, df_in$inverse_wt_quarters)),
+  table1(c(split(df_in, df_in$inverse_wt_quarters), list("Overall" = df_in)),
     labels = list(variables = vars_table_labels),
     render.categorical = my_render_cat, 
     render.cont = my_render_cont
