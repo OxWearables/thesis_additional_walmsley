@@ -13,7 +13,7 @@ consistent_theme <-list(# CANVAS
     axis.text.y = element_text(colour = "black", size = 16, face = "bold"),
     axis.title.y = element_blank(),
     legend.text = element_text(size = 10),
-    legend.title = element_text(size = 10, face = "bold"),
+    legend.title = element_blank(),
     legend.position = "bottom",
     plot.margin = unit(c(1, 20, 1, 1), "lines"))
 )
