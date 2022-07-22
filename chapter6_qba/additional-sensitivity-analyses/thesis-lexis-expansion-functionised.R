@@ -1,4 +1,5 @@
 produce_tp_plot <- function(tp_vec, rot_list, cm, act_vars_z, df){
+  
   # Make recording frame for time period ------------------------------------------------------
   rec_dat <- make_rec_dat_frame((length(tp_vec)+1)*length(rot_list))
   names(rec_dat)[names(rec_dat) == "Model"] <- "TimePeriod" # Modifications to data frame to make it more like what is needed here
@@ -33,10 +34,12 @@ produce_tp_plot <- function(tp_vec, rot_list, cm, act_vars_z, df){
         piv1 + piv2 + piv3,
       data = loc
     )
+    n_participant <- cox_mod_simple$n
+    n_event <- cox_mod_simple$nevent
     
     HRs <- calc_HRs(model = cox_mod_simple, row = "piv1", ilr_diff = ilr_diff)
-    rec_dat[(i - 1) * (length(tp_vec)+1)+ 1,] <- c(comp_name, diff, "overall", HRs, NA)
-    rm(HRs)
+    rec_dat[(i - 1) * (length(tp_vec)+1)+ 1,] <- c(comp_name, diff, "overall", HRs, n_event, n_participant, NA)
+    rm(HRs, n_event)
 
 
     # Run Lexis expansion--------------------------------------------------------------------
@@ -50,6 +53,8 @@ produce_tp_plot <- function(tp_vec, rot_list, cm, act_vars_z, df){
     spl <- splitLexis(lex, "tos", breaks = c(tp_vec, 8) * 365.25)
     spl$time_period <- factor(timeBand(spl, "tos", "left") / 365.25)
     spl$lex.exage <- spl$age + spl$lex.dur
+    
+    print(head(spl[, c("eid", "age_entry", "age_exit", "CVD_event", "lex.dur", "age", "lex.Xst", "time_period")]), 15)
 
     # Run Cox models with period split -----------------------------------------------------
     # Quickly get different reference time periods by change of reference. This is rather than taking single model 
@@ -78,6 +83,8 @@ produce_tp_plot <- function(tp_vec, rot_list, cm, act_vars_z, df){
         data = spl
       )
       p_val_int <- anova(cox_mod_by_period, cox_mod_by_period_no_interact)$`P(>|Chi|)`[2]
+      n_event <- nrow(spl[(spl$time_period == ref) & (spl$lex.Xst ==1), ])
+      
       
       print(summary(cox_mod_by_period)) # Do some inspection to examine correct
       
@@ -89,9 +96,11 @@ produce_tp_plot <- function(tp_vec, rot_list, cm, act_vars_z, df){
           diff,
           tpname,
           HRs,
+          n_event, 
+          n_participant,
           p_val_int)
       
-      rm(ref, HRs)
+      rm(ref, HRs, n_event)
     } # This closes iteration over times
   
     rm(loc, spl)
