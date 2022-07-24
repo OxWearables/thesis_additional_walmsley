@@ -636,8 +636,9 @@ for (i in 1:length(rot_list)) {
   )
   assign(paste0("cox_", comp_name), cox_mod_simple)
   HRs <- calc_HRs(model = cox_mod_simple, row = "piv1", ilr_diff = ilr_diff)
-  rec_dat[(i - 1) * 2 + 1,] <- c(comp_name, diff, "unweighted", HRs)
-  rm(HRs)
+  ev_nums <- get_ev_nums(cox_mod_simple)
+  rec_dat[(i - 1) * 2 + 1,] <- c(comp_name, diff, "unweighted", HRs, ev_nums)
+  rm(HRs, ev_nums)
   
   
   # Weighted Cox model---------------------------------------- 
@@ -654,8 +655,9 @@ for (i in 1:length(rot_list)) {
   )
   assign(paste0("cox_weighted_", comp_name), cox_mod_weighted)
   HRs <- calc_HRs(model = cox_mod_weighted, row = "piv1", ilr_diff = ilr_diff)
-  rec_dat[(i - 1) * 2 + 2,] <- c(comp_name, diff, "weighted", HRs)
-  rm(HRs)
+  ev_nums <- get_ev_nums(cox_mod_weighted)
+  rec_dat[(i - 1) * 2 + 2,] <- c(comp_name, diff, "weighted", HRs, ev_nums)
+  rm(HRs, ev_nums)
 }
 ```
 
@@ -671,6 +673,16 @@ write.csv(rec_dat, "plots/sel_bias_estimates.csv") # This just saves the df so i
 ## Make forest plot --------------------------------------------------------------
 Admin:
 ```{r}
+# In this case don't put event numbers on plot------------------------------------
+print(rec_dat$n_event)
+print(rec_dat$n_participant)
+if ((range(rec_dat$n_event) != 0)|(range(rec_dat$n_participant)!= 0)){
+  stop("Stop: not zero range")
+}
+rec_dat$n_event <- NA
+rec_dat$n_participant <- NA
+
+# Now do plot admin --------------------------------------------------------------
 rec_dat <- do_plot_admin(rec_dat, c("weighted", "unweighted"))
 my_cols <- get_cols(2)
 ```
@@ -714,8 +726,8 @@ svg(
 print(p)
 dev.off()
 ```
-
-# Additional checks: concern - weighting never makes a difference
+# Sensitivity 
+## Additional checks: concern - weighting never makes a difference
 This isn't always true:
 ```{r}
 summary(cox_mod_simple)
@@ -745,5 +757,120 @@ print(summary(cox_mod_rcheck1))
 print(summary(cox_mod_rcheck2))
 
 summary(df_in$inverse_wt_stab_trim)
+
+```
+
+Still, it's broadly underwhelming.
+
+
+
+## Simpler weights
+
+Calculate simpler weights: 
+```{r}
+df_all$inverse_wt_simple <- 1 / df_all$selec_prob 
+
+# Add to analytic data
+df_in <-
+  merge(df_in, df_all[, c("eid", "inverse_wt_simple")], by = "eid")
+```
+
+Cox model:
+```{r}
+rec_dat <- make_rec_dat_frame(16)
+
+for (i in 1:4) {
+  # set up-----------------------------------------------------
+  comp_labels <- rot_list[[i]]
+  comp_name <- names(rot_list)[i]
+
+  # set up for later looking at transformation-----------------
+  diff <- get_diff(comp_name)
+  ilr_diff <- create_ref_vals(comp_name, cm)
+
+  # do transformation-----------------------------------------
+  piv_c <-
+    as.data.frame(robCompositions::pivotCoord(act_vars_z[, comp_labels]))
+  colnames(piv_c) <- c("piv1", "piv2", "piv3")
+
+  # make new data with these variables------------------------
+  loc <- cbind(df_in, piv_c)
+
+
+  # basic cox model-------------------------------------------
+  cox_mod_simple <- coxph(
+    Surv(age_entry, age_exit, CVD_event) ~
+      strata(sex) + ethnicity + smoking + alcohol +
+      fruit_and_veg_cats + oily_fish +
+      red_and_processed_meat_cats + education_cats +
+      TDI_quartiles +
+      piv1 + piv2 + piv3,
+    data = loc
+  )
+  assign(paste0("cox_", comp_name), cox_mod_simple)
+  HRs <- calc_HRs(model = cox_mod_simple, row = "piv1", ilr_diff = ilr_diff)
+  ev_nums <- get_ev_nums(cox_mod_simple)
+  rec_dat[(i - 1) * 4 + 1,] <- c(comp_name, diff, "unweighted", HRs, ev_nums)
+  rm(HRs, ev_nums)
+  
+  
+  # Weighted Cox model---------------------------------------- 
+  cox_mod_weighted <- coxph(
+    Surv(age_entry, age_exit, CVD_event) ~
+      strata(sex) + ethnicity + smoking + alcohol +
+      fruit_and_veg_cats + oily_fish +
+      red_and_processed_meat_cats + education_cats +
+      TDI_quartiles +
+      piv1 + piv2 + piv3, weights = inverse_wt_stab_trim,
+    data = loc, id = eid, robust = TRUE # see notes on coxph function, robust = TRUE (i.e. robust SEs) needed if weights are sampling weights.
+    # This is the most likely place for errors in this code 
+    # But it seemes that coxph with weights and robust = TRUE treats weights as sampling weights
+  )
+  assign(paste0("cox_weighted_", comp_name), cox_mod_weighted)
+  HRs <- calc_HRs(model = cox_mod_weighted, row = "piv1", ilr_diff = ilr_diff)
+  ev_nums <- get_ev_nums(cox_mod_weighted)
+  rec_dat[(i - 1) * 4 + 2,] <- c(comp_name, diff, "weighted", HRs, ev_nums)
+  rm(HRs, ev_nums)
+  
+    # Weighted Cox model, cluster term---------------------------------------- 
+  cox_mod_alt_syntax <- coxph(
+    Surv(age_entry, age_exit, CVD_event) ~
+      strata(sex) + ethnicity + smoking + alcohol +
+      fruit_and_veg_cats + oily_fish +
+      red_and_processed_meat_cats + education_cats +
+      TDI_quartiles +
+      piv1 + piv2 + piv3 + cluster(eid), weights = inverse_wt_stab_trim,
+    data = loc # This is based on the syntax in the Therneau-Grambsch book.
+    # It should be identical but that's what I'm checking
+    )
+  assign(paste0("cox_alt_syntax_", comp_name), cox_mod_alt_syntax)
+  HRs <- calc_HRs(model = cox_mod_alt_syntax, row = "piv1", ilr_diff = ilr_diff)
+  ev_nums <- get_ev_nums(cox_mod_alt_syntax)
+  rec_dat[(i - 1) * 4 + 3,] <- c(comp_name, diff, "weighted - alt syntax", HRs, ev_nums)
+  rm(HRs, ev_nums)
+  
+  
+    # Weighted Cox model, simple weights---------------------------------------- 
+  cox_mod_simple_weights <- coxph(
+    Surv(age_entry, age_exit, CVD_event) ~
+      strata(sex) + ethnicity + smoking + alcohol +
+      fruit_and_veg_cats + oily_fish +
+      red_and_processed_meat_cats + education_cats +
+      TDI_quartiles +
+      piv1 + piv2 + piv3, weights = inverse_wt_simple,
+    data = loc, id = eid, robust = TRUE # see notes on coxph function, robust = TRUE (i.e. robust SEs) needed if weights are sampling weights.
+    # This is the most likely place for errors in this code 
+    # But it seemes that coxph with weights and robust = TRUE treats weights as sampling weights
+  )
+  assign(paste0("cox_simple_weights_", comp_name), cox_mod_simple_weights)
+  HRs <- calc_HRs(model = cox_mod_simple_weights, row = "piv1", ilr_diff = ilr_diff)
+  ev_nums <- get_ev_nums(cox_mod_simple_weights)
+  rec_dat[(i - 1) * 4 +4,] <- c(comp_name, diff, "simple_weights", HRs, ev_nums)
+  rm(HRs, ev_nums)
+}
+```
+Inspect results: 
+```{r}
+print(rec_dat)
 
 ```
