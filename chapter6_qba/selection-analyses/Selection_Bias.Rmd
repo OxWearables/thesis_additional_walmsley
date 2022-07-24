@@ -748,7 +748,7 @@ exp(cw[["ethnicityBlack"]])
 
 Look for starker examples:
 ```{r}
-cox_mod_rcheck1 <- coxph(Surv(age_entry, age_exit, CVD_event) ~ , weights = df_in$inverse_wt_stab_trim,
+cox_mod_rcheck1 <- coxph(Surv(age_entry, age_exit, CVD_event) ~ alcohol + sex  + ethnicity + smoking, weights = df_in$inverse_wt_stab_trim,
     data = df_in, id = eid, robust = TRUE )
   
 cox_mod_rcheck2 <- coxph(Surv(age_entry, age_exit, CVD_event) ~ alcohol + sex  + ethnicity + smoking, data = df_in)
