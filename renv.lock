@@ -1,6 +1,6 @@
 {
   "R": {
-    "Version": "4.2.0",
+    "Version": "4.2.1",
     "Repositories": [
       {
         "Name": "CRAN",
@@ -16,6 +16,27 @@
       "Repository": "CRAN",
       "Hash": "b18b34cfbf932e17803c2e3e4b1a2d2a",
       "Requirements": []
+    },
+    "Epi": {
+      "Package": "Epi",
+      "Version": "2.46",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "8c034ee3794ad710b8ab4cc9dc5f885b",
+      "Requirements": [
+        "MASS",
+        "Matrix",
+        "cmprsk",
+        "data.table",
+        "dplyr",
+        "etm",
+        "magrittr",
+        "mgcv",
+        "numDeriv",
+        "plyr",
+        "survival",
+        "zoo"
+      ]
     },
     "FNN": {
       "Package": "FNN",
@@ -362,6 +383,16 @@
         "withr"
       ]
     },
+    "checkmate": {
+      "Package": "checkmate",
+      "Version": "2.1.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "147e4db6909d8814bb30f671b49d7e06",
+      "Requirements": [
+        "backports"
+      ]
+    },
     "class": {
       "Package": "class",
       "Version": "7.3-20",
@@ -388,6 +419,24 @@
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "c5f8447373ec2a0f593c694024e5b7ee",
+      "Requirements": []
+    },
+    "cmprsk": {
+      "Package": "cmprsk",
+      "Version": "2.2-11",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "677e2fde792ef6737926f92b9cb804e6",
+      "Requirements": [
+        "survival"
+      ]
+    },
+    "codetools": {
+      "Package": "codetools",
+      "Version": "0.2-18",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "019388fc48e48b3da0d3a76ff94608a8",
       "Requirements": []
     },
     "colorspace": {
@@ -527,6 +576,41 @@
         "rlang"
       ]
     },
+    "epicoda": {
+      "Package": "epicoda",
+      "Version": "0.0.0.9000",
+      "Source": "GitHub",
+      "Remotes": "tystan/deltacomp",
+      "RemoteType": "github",
+      "RemoteHost": "api.github.com",
+      "RemoteRepo": "epicoda",
+      "RemoteUsername": "activityMonitoring",
+      "RemoteRef": "fedd06114d664cfcd4087e6620b672e111f37ef0",
+      "RemoteSha": "fedd06114d664cfcd4087e6620b672e111f37ef0",
+      "Hash": "a9f41e75531b2ec595ee0ba51f15fd99",
+      "Requirements": [
+        "data.table",
+        "forestplot",
+        "ggplot2",
+        "scales",
+        "survival",
+        "zCompositions"
+      ]
+    },
+    "etm": {
+      "Package": "etm",
+      "Version": "1.1.1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "3640f66f96821b628fc912114d24dbeb",
+      "Requirements": [
+        "Rcpp",
+        "RcppArmadillo",
+        "data.table",
+        "lattice",
+        "survival"
+      ]
+    },
     "evaluate": {
       "Package": "evaluate",
       "Version": "0.15",
@@ -613,6 +697,7 @@
       "Repository": "CRAN",
       "Hash": "618609b42c9406731ead03adf5379850",
       "Requirements": [
+        "codetools",
         "iterators"
       ]
     },
@@ -623,6 +708,17 @@
       "Repository": "CRAN",
       "Hash": "32b25c97ce306a760c4d9f787991b5d9",
       "Requirements": []
+    },
+    "forestplot": {
+      "Package": "forestplot",
+      "Version": "2.0.1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "e93fff5193272af072c5c6479c981c45",
+      "Requirements": [
+        "checkmate",
+        "magrittr"
+      ]
     },
     "fpc": {
       "Package": "fpc",
@@ -738,7 +834,9 @@
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "ace993e2dad5e64ed46391302b79e94f",
-      "Requirements": []
+      "Requirements": [
+        "codetools"
+      ]
     },
     "glue": {
       "Package": "glue",
@@ -872,6 +970,7 @@
         "class",
         "nnet",
         "prodlim",
+        "rpart",
         "survival"
       ]
     },
@@ -1673,6 +1772,14 @@
         "DEoptimR"
       ]
     },
+    "rpart": {
+      "Package": "rpart",
+      "Version": "4.1.16",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "ea3ca1d9473daabb3cd0f1b4f974c1ed",
+      "Requirements": []
+    },
     "rprojroot": {
       "Package": "rprojroot",
       "Version": "2.0.3",
@@ -2049,14 +2156,6 @@
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "40682ed6a969ea5abfd351eb67833adc",
-      "Requirements": []
-    },
-    "xtable": {
-      "Package": "xtable",
-      "Version": "1.8-4",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "b8acdf8af494d9ec19ccb2481a9b11c2",
       "Requirements": []
     },
     "yaml": {
