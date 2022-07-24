@@ -471,7 +471,7 @@ for (var in names(rot_list)) {
 ## Bootstrap the whole procedure
 Sampling for the two step bootstrap is non-obvious, to ensure correct sample sizes. I have chosen to sample those with repeated measurements and without separately, to ensure the correct sample size in the final sample. 
 ```{r}
-n_bootstrap <-  1000
+n_bootstrap <-  2000
 
 # Set up data frame to record estimates
 ests <- data.frame(matrix(nrow = n_bootstrap, ncol = length(names(rot_list))))
@@ -756,3 +756,32 @@ for (var in var_check){
   rm(av)
 }
 ```
+
+
+Consider the assumptions of the linear models used in prediction:
+```{r}
+for (var in names(rot_list)){
+  # Find names of variables
+  form_vars <-
+    colnames(df_rm)[grepl(paste0("^", var, "z"), colnames(df_rm))]
+  form_vars <- unique(gsub("_(.*)", "", form_vars))
+  
+  form_vars_old <- paste0(form_vars, "_s0")
+  
+   for (var_name in form_vars){
+    # Mean of relevant repeat is outcome
+    df_rm[, paste0("mean_reps_w_data", var_name)] <- calc_mean_reps(var_name = var_name, data = df_rm, suffix_rep = c("_s1", "_s2", "_s3", "_s4"), exclusion_indic = "excluded")
+
+    # Calc model
+    lambda_lin <- lm(as.formula(paste0("mean_reps_w_data", var_name, "~", paste0(form_vars_old, collapse = "+"), "+age_entry+sex+ethnicity+smoking+alcohol+fruit_and_veg_cats+oily_fish+red_and_processed_meat_cats+education_cats+TDI_quartiles")), data = df_rm)
+    pred <- predict(lambda_lin, df_rm)
+    print(length(pred))
+    print(cor(pred, as.double(df_rm$age_entry)))
+    }
+  # Plot
+  plot(lambda_lin)
+   }
+
+}
+```
+
