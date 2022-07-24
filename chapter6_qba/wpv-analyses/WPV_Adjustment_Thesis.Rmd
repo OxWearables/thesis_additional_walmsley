@@ -431,7 +431,6 @@ for (var in names(rot_list)) {
     c(paste0(var, "_pivot1"), summary(cox_basic)$conf.int[1, c(1, 3:4)])
   
   # Make all predictive models
-  ## XXX NOTE: Change to precision weighting???? This would weight the outcome by the number of measurements
   models_list <- calc_models_multi(
     var_names = form_vars,
     data = df_rm,
@@ -472,7 +471,7 @@ for (var in names(rot_list)) {
 ## Bootstrap the whole procedure
 Sampling for the two step bootstrap is non-obvious, to ensure correct sample sizes. I have chosen to sample those with repeated measurements and without separately, to ensure the correct sample size in the final sample. 
 ```{r}
-n_bootstrap <- 1000
+n_bootstrap <-  1000
 
 # Set up data frame to record estimates
 ests <- data.frame(matrix(nrow = n_bootstrap, ncol = length(names(rot_list))))
@@ -509,8 +508,10 @@ for (i in 1:n_bootstrap){
   df_loc <- rbind(df_non_rm_loc, df_left_loc)
   
   if (nrow(df_loc) != nrow(df)){
-    stop("Failure to get large enough bootstrap")
+    stop("Failure to get correct size bootstrap")
   }
+  
+#  print(head(df_loc$eid))
 
   # CALCULATE MODELS IN BOOTSTRAP SAMPLE--------------------------------------------------------------
   # Note we are using same bootstrap samples for all rotations. This makes sense as we are essentially looking at the 
@@ -545,12 +546,24 @@ for (i in 1:n_bootstrap){
   ests[i, paste0(var, "_pivot1")] <- summary(cox_mod)$coefficients[1, 1]
   
   } # This closes rotation through different variables as first pivot coordinate
+  
+  # CLEAN --------------------------------------------------------------------------------
+  rm(df_rm_rownums_loc, df_rm_loc, df_left_loc, pred_data_loc, df_loc, df_non_rm_loc)
 }
 
 # CHECK 
 if (!isTRUE(all.equal(colnames(ests), colnames(coefs)))){
   stop("Something went wrong in column names")
 }
+
+# Write out bootstrap for reuse
+saveRDS(ests, "bootstrap_ests_for_reuse.RDS")
+```
+
+
+```{r}
+# Now reload data for calculations
+ests <- readRDS("bootstrap_ests_for_reuse.RDS")
 
 # CALCULATE BOOTSTRAP (BASIC OR REVERSE PERCENTILE BOOTSTRAP; PERCENTILE BOOTSTRAP)
 ## http://users.stat.umn.edu/~helwig/notes/npboot-notes.html#bootstrap-confidence-intervals
@@ -602,13 +615,15 @@ for (i in 1:length(rot_list)) {
   
   # Calculate HRs associated with difference
   HRs <- as.double(vals[vals$Variable == var_name_pivot, c("HR", "HR_Lower_CI", "HR_Upper_CI")]) ^ ilr_diff
-  rec_dat[(i - 1) * 2 + 1,] <- c(comp_name, diff, "measurement_adjusted", HRs)
-  rm(HRs)
+  ev_nums <- get_ev_nums(get(paste0("cox_mod", comp_name)))
+  rec_dat[(i - 1) * 2 + 1,] <- c(comp_name, diff, "measurement_adjusted", HRs, ev_nums)
+  rm(HRs, ev_nums)
   
   # Calculate HRs associated with difference unadjusted for measurement error
   HRs <- as.double(vals_old[vals_old$Variable == var_name_pivot, c("HR", "HR_Lower_CI", "HR_Upper_CI")]) ^ ilr_diff
-  rec_dat[(i - 1) * 2 + 2,] <- c(comp_name, diff, "original", HRs)
-  rm(HRs)
+  ev_nums <- get_ev_nums(cox_basic)
+  rec_dat[(i - 1) * 2 + 2,] <- c(comp_name, diff, "original", HRs, ev_nums)
+  rm(HRs, ev_nums)
 }
 ```
 
@@ -621,6 +636,12 @@ for (var in c("HR", "LowerCI", "UpperCI")) {
 write.csv(rec_dat, "plots/rec_dat_meas_error.csv") # This just saves so it's not a pain to get back if needed
 rec_dat <- read.csv("plots/rec_dat_meas_error.csv")
 rec_dat$X <- NULL
+# Don't use participant numbers on this plot
+if (((range(rec_dat$n_event)[1] -  range(rec_dat$n_event)[2]) != 0)|(range(rec_dat$n_participant)[1] -  range(rec_dat$n_participant)[2]) ){
+  stop("Stop: not zero range")
+}
+rec_dat$n_event <- NA
+rec_dat$n_participant <- NA
 
 ## Make forest plot --------------------------------------------------------------
 
