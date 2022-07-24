@@ -54,8 +54,6 @@ produce_tp_plot <- function(tp_vec, rot_list, cm, act_vars_z, df){
     spl$time_period <- factor(timeBand(spl, "tos", "left") / 365.25)
     spl$lex.exage <- spl$age + spl$lex.dur
     
-    print(head(spl[, c("eid", "age_entry", "age_exit", "CVD_event", "lex.dur", "age", "lex.Xst", "time_period")]), 15)
-
     # Run Cox models with period split -----------------------------------------------------
     # Quickly get different reference time periods by change of reference. This is rather than taking single model 
     # and doing manual calculation to get different rows
@@ -86,6 +84,7 @@ produce_tp_plot <- function(tp_vec, rot_list, cm, act_vars_z, df){
       n_event <- nrow(spl[(spl$time_period == ref) & (spl$lex.Xst ==1), ])
       
       
+      # Inspection
       print(summary(cox_mod_by_period)) # Do some inspection to examine correct
       
       # Recording results
@@ -102,7 +101,11 @@ produce_tp_plot <- function(tp_vec, rot_list, cm, act_vars_z, df){
       
       rm(ref, HRs, n_event)
     } # This closes iteration over times
-  
+    
+    # Do some inspection to check correct-----------------------------------------------------------------------------
+    print(head(spl[, c("eid", "age_entry", "age_exit", "CVD_event", "lex.dur", "age", "lex.exage", "lex.Xst", "time_period")]), 20)
+    
+    # Tidy
     rm(loc, spl)
 
   } # This closes iteration over variable in first pivot coordinate
@@ -164,7 +167,7 @@ produce_tp_plot <- function(tp_vec, rot_list, cm, act_vars_z, df){
   ## Print some details about plot ---------------------------------------------------------------------------------
   tos <- cut(df$time_in_study[df$CVD_event == 1]/365.25, breaks = c(tp_vec, 8), labels = names(tp_vec))
   print(table(tos))
-
+  
   ## return
   return(list(rec_dat, cox_mod_by_period))
 }
