@@ -788,3 +788,76 @@ for (var in names(rot_list)){
 }
 ```
 
+# Check regression calibration functions 
+
+# Regression calibration procedure
+## Regression calibration in full dataset
+```{r}
+coefs_check <- data.frame(matrix(nrow = 1, ncol = 4))
+colnames(coefs_check) <- paste0(names(rot_list), "_pivot1")
+
+vals_old <- data.frame(matrix(nrow = 4, ncol = 4))
+colnames(vals_old) <- c("Variable", "HR", "HR_Lower_CI", "HR_Upper_CI")
+vals_old$Variable <- paste0(names(rot_list), "_pivot1")
+
+for (var in names(rot_list)) {
+  # Find names of variables
+  form_vars <-
+    colnames(df_rm)[grepl(paste0(var, "z"), colnames(df_rm))]
+  form_vars <- unique(gsub("_(.*)", "", form_vars))
+  
+  # Unadulterated Cox model
+  form_vars_old <- paste0(form_vars, "_s0")
+  form_sum_old <-  paste0(form_vars_old, collapse = "+")
+  cox_basic <-
+    coxph(formula(
+      paste0(
+        "Surv(age_entry, age_exit, CVD_event) ~ ",
+        form_sum_old,
+        "+ strata(sex)+
+  ethnicity + smoking + alcohol + fruit_and_veg_cats + oily_fish + red_and_processed_meat_cats + education_cats + TDI_quartiles"
+      )
+    ), data = df)
+  
+  # Assign Cox model, outputs
+  vals_old[vals_old$Variable == paste0(var, "_pivot1"),] <-
+    c(paste0(var, "_pivot1"), summary(cox_basic)$conf.int[1, c(1, 3:4)])
+  
+  # Make all predictive models
+  models_list <- calc_models_multi_slow(
+    var_names = form_vars,
+    data = df_rm,
+    suffix_baseline = "_s0",
+    suffix_rep = c("_s1", "_s2", "_s3", "_s4"),
+    exclusion_indic = "excluded",
+    covariates = c("age_entry", "sex", "ethnicity", "smoking", "alcohol", "fruit_and_veg_cats", "oily_fish", "red_and_processed_meat_cats", "education_cats", "TDI_quartiles")
+  )
+
+  # Make predictions
+  pred_data <-
+    pred_rep_slow(models_list, newdata = df, suffix_pred = "_pred")
+
+
+  # Variables for new calculation
+  form_vars_new <- paste0(form_vars, "_pred")
+  form_sum <- paste0(form_vars_new, collapse = "+")
+
+  # Cox model
+  cox_mod <-
+    coxph(formula(
+      paste0(
+        "Surv(age_entry, age_exit, CVD_event) ~ ",
+        form_sum,
+        "+ strata(sex)+
+  ethnicity + smoking + alcohol + fruit_and_veg_cats + oily_fish + red_and_processed_meat_cats + education_cats + TDI_quartiles"
+      )
+    ), data = pred_data)
+
+  # Assign Cox model, outputs
+  assign(paste0("cox_mod_check", var), cox_mod)
+  coefs_check[, paste0(var, "_pivot1")] <-
+    summary(cox_mod)$coefficients[1, 1]
+
+}
+```
+
