@@ -626,14 +626,17 @@ for (i in 1:length(rot_list)) {
   rm(HRs, ev_nums)
 }
 ```
-
-Plot difference: 
+Write out estimates:
 ```{r}
 for (var in c("HR", "LowerCI", "UpperCI")) {
   rec_dat[, var] <- as.numeric(rec_dat[, var])
 }
 
 write.csv(rec_dat, "plots/rec_dat_meas_error.csv") # This just saves so it's not a pain to get back if needed
+```
+
+Plot difference:
+```{r}
 rec_dat <- read.csv("plots/rec_dat_meas_error.csv")
 rec_dat$X <- NULL
 # Don't use participant numbers on this plot
@@ -646,8 +649,8 @@ rec_dat$n_participant <- NA
 ## Make forest plot --------------------------------------------------------------
 
 ### This part is admin for labels etc --------------------------------------------
-rec_dat$Model[rec_dat$Model == "measurement_adjusted"] <- "adjusted for within-person variation"
-rec_dat <- do_plot_admin(rec_dat, mod_levels = c( "adjusted for within-person variation", "original"))
+rec_dat$Model[rec_dat$Model == "measurement_adjusted"] <- "with within-person variation correction"
+rec_dat <- do_plot_admin(rec_dat, mod_levels = c( "with within-person variation correction", "original"))
 my_cols <- get_cols(2)
 
 ### Make plot----------------------------------------------------------------------
