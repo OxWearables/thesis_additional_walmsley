@@ -4,7 +4,7 @@ library("plyr")
 library("gtools")
 
 # NAME RUN
-name_of_current_run <- "selection_second_attempt"
+name_of_current_run <- "selection_third_attempt" # What's changed between second and third attempt is the additional sensitivity analysis
 
 # NAME WHERE DATA IS
 input_loc <- "../../paperRW2021/"
@@ -21,6 +21,19 @@ participant <-
 
 # MERGE NEW PARTICIPANT DATA AS OBTAINED FOR THESIS
 
+# READ IN DEATH DATA=============================================================================================
+death <-
+  read.csv(paste0(input_loc,"ukbDataPrep/inputData/death.txt"),
+           sep = "\t")
+
+## Note a small number of participants have multiple death records.
+## This seems to occur almost exclusively among Scottish participants.
+## In these records, both records seem to be associated with the same date.
+## Therefore, we only use one index per participant
+n_old <- nrow(death)
+death <- death[death$ins_index == 0,]
+n_new <- nrow(death)
+print(paste0("There were ", n_old - n_new , " duplicate death records"))
 
 # PERFORM WITHDRAWALS============================================================================================
 w <-
@@ -29,12 +42,20 @@ w <-
 participant <- participant[!(participant$eid %in% w$V1), ]
 all <- participant
 
+# There's one participant with no data at all, remove them as this seems like an error in database===============
+nbef <- nrow(all)
+all <- all[all$Sex != "", ]
+naft <- nrow(all)
+if ((naft - nbef) != -1)
+  stop("Something's changed in input data, wrong number of weird excusions.")
+
 # ADD AND FORMAT SOME DATES
 all$CVD_date <- as.Date(all$CVD, format = "%F")
 all$approxbirth_date <-
   as.Date(paste(all$YearOfBirth, all$MonthOfBirth, "15", sep = "-"),
           "%Y-%B-%d")
 all$assess_date <- as.Date(all$DatAttendAssessCent, format = "%F")
+
 
 # SETUP TABLE TO DESCRIBE EXCLUSIONS===============================================================================================
 exclusions <- data.frame(matrix(nrow = 0, ncol = 3))
@@ -107,6 +128,15 @@ exclusions <-
       "Number_remaining" = nrow(all)
     )
   )
+
+# ADD INDICATOR OF REDUCED SUBCOHORT==========================================================================================
+all$in_restricted_cohort <- TRUE
+all$in_restricted_cohort[all$CVD != ""] <- (all$CVD_date[all$CVD != ""] >= as.Date("2013-06-01"))
+print(nrow(all))
+all <- merge(all, death, by = "eid", all.x = TRUE)
+print(nrow(all))
+
+all$in_restricted_cohort[!is.na(all$date_of_death)] <- (as.Date(all$date_of_death[!is.na(all$date_of_death)], format = "%d/%m/%Y") >= as.Date("2013-06-01"))
 
 
 # ADD DATE OF BIRTH===========================================================================================================================================
