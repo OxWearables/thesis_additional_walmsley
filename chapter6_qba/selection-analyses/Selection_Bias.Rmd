@@ -676,6 +676,8 @@ Admin:
 # In this case don't put event numbers on plot------------------------------------
 print(rec_dat$n_event)
 print(rec_dat$n_participant)
+rec_dat$n_event <- as.double(rec_dat$n_event)
+rec_dat$n_participant <- as.double(rec_dat$n_participant)
 if (((range(rec_dat$n_event)[1] -  range(rec_dat$n_event)[2]) != 0)|((range(rec_dat$n_participant)[1] -  range(rec_dat$n_participant)[2])!=0)){
   stop("Stop: not zero range")
 }
