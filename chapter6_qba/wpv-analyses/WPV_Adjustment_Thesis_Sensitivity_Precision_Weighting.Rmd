@@ -458,3 +458,138 @@ print(rec_dat)
 
 
 Conclusion: precision weighting the model makes almost no difference, so keep methodology simple and don't bother. 
+
+
+
+# BOOTSTRAPPING 
+
+## Bootstrap the whole procedure
+Sampling for the two step bootstrap is non-obvious, to ensure correct sample sizes. I have chosen to sample those with repeated measurements and without separately, to ensure the correct sample size in the final sample. 
+```{r}
+n_bootstrap <-  1000
+
+# Set up data frame to record estimates
+ests <- data.frame(matrix(nrow = n_bootstrap, ncol = length(names(rot_list))))
+colnames(ests) <- paste0(names(rot_list), "_pivot1")
+
+# Set up sets of ids/data subsets for sampling
+ids_rm <- df_rm$eid
+df_non_rm <- df[!(df$eid %in% ids_rm), ]
+df_limit <- df[df$eid %in% ids_rm, ]
+df_left <- df_limit[order(match(df_limit$eid, df_non_rm$eid)), ]
+rm(df_limit) # Keep tidy
+
+for (i in 1:n_bootstrap){
+  # SAMPLING-------------------------------------------------------------------------------------
+  # Sample those in overlap
+  df_rm_rownums_loc <- sample(nrow(df_rm), nrow(df_rm), replace = TRUE)
+  df_rm_loc <- df_rm[df_rm_rownums_loc, ]
+  df_left_loc <- df_left[df_rm_rownums_loc, ] 
+  
+  # Check this sampling is behaving correctly 
+  if (any(df_left_loc$eid != df_rm_loc$eid)){
+    stop("Error in subsetting code")
+  }
+  
+  # Sample those not in overlap
+  df_non_rm_loc <- df_non_rm[sample(nrow(df_non_rm), nrow(df_non_rm), replace = TRUE), ]
+  
+  # Check this sampling is working correctly
+  if (length(intersect(df_non_rm_loc$eid, df_left_loc$eid)) != 0){
+    stop("Error in sampling code - intersect of datasets non null")
+  }
+  
+  # Concatenate datasets
+  df_loc <- rbind(df_non_rm_loc, df_left_loc)
+  
+  if (nrow(df_loc) != nrow(df)){
+    stop("Failure to get correct size bootstrap")
+  }
+  
+#  print(head(df_loc$eid))
+
+  # CALCULATE MODELS IN BOOTSTRAP SAMPLE--------------------------------------------------------------
+  # Note we are using same bootstrap samples for all rotations. This makes sense as we are essentially looking at the 
+  # same model in these cases
+  
+  for (var in names(rot_list)){
+    # Find names of variables
+    form_vars <- colnames(df_rm_loc)[grepl(paste0(var, "z"), colnames(df_rm_loc))]
+    form_vars <- unique(gsub("_(.*)", "", form_vars))
+  
+    # Make all predictive models
+    models_list <- calc_models_multi(
+      var_names = form_vars,
+      data = df_rm_loc,
+      suffix_baseline = "_s0",
+      suffix_rep = c("_s1", "_s2", "_s3", "_s4"),
+      exclusion_indic = "excluded",
+      covariates = c("age_entry", "sex", "ethnicity", "smoking", "alcohol", "fruit_and_veg_cats", "oily_fish", "red_and_processed_meat_cats", "education_cats", "TDI_quartiles"), 
+      precision_weighted = TRUE
+    )
+  
+    # Make predictions
+    pred_data_loc <- pred_rep(models_list, newdata = df_loc, suffix_pred = "_pred")
+    
+    # Variables for new calculation
+    form_vars_new <- paste0(form_vars, "_pred")
+    form_sum <- paste0(form_vars_new, collapse = "+")
+    
+    # Cox model
+    cox_mod <- coxph(formula(paste0("Surv(age_entry, age_exit, CVD_event) ~ ", form_sum, "+ strata(sex)+ ethnicity + smoking + alcohol + fruit_and_veg_cats + oily_fish + red_and_processed_meat_cats + education_cats + TDI_quartiles")), data = pred_data_loc)
+  
+  # Store variables
+  ests[i, paste0(var, "_pivot1")] <- summary(cox_mod)$coefficients[1, 1]
+  
+  } # This closes rotation through different variables as first pivot coordinate
+  
+  # CLEAN --------------------------------------------------------------------------------
+  rm(df_rm_rownums_loc, df_rm_loc, df_left_loc, pred_data_loc, df_loc, df_non_rm_loc)
+}
+
+# CHECK 
+if (!isTRUE(all.equal(colnames(ests), colnames(coefs)))){
+  stop("Something went wrong in column names")
+}
+
+# Write out bootstrap for reuse
+saveRDS(ests, "bootstrap_ests_precision_weighted_for_reuse.RDS")
+```
+
+
+```{r}
+# Now reload data for calculations
+ests <- readRDS("bootstrap_ests_precision_weighted_for_reuse.RDS")
+
+# CALCULATE BOOTSTRAP (BASIC OR REVERSE PERCENTILE BOOTSTRAP; PERCENTILE BOOTSTRAP)
+## http://users.stat.umn.edu/~helwig/notes/npboot-notes.html#bootstrap-confidence-intervals
+
+# For basic/reverse percentile
+diffs <- ests-coefs[rep(1, nrow(ests)), colnames(ests)] # Subtract overall estimate from estimate in bootstrap sample 
+
+# Prep data frame with values and fill it out
+vals <- data.frame(matrix(nrow = 4, ncol = 11))
+colnames(vals) <- c("Variable", "Estimate", "Lower_CI", "Upper_CI", "HR", "HR_Lower_CI", "HR_Upper_CI", "Lower_CI_percentile", "Upper_CI_percentile",  "HR_Lower_CI_percentile", "HR_Upper_CI_percentile")
+for (i in 1:length(rot_list)){
+  var_name <- colnames(ests)[i]
+  
+  # basic/empirical/reverse percentile
+  lq <- quantile(diffs[, var_name], 0.025)
+  uq <- quantile(diffs[, var_name], 0.975)
+  c <- coefs[, var_name]
+  uci <- c - lq 
+  lci <- c - uq
+  
+  # percentile
+  lqp <- quantile(ests[, var_name], 0.025)
+  uqp <- quantile(ests[, var_name], 0.975)
+  
+  # return 
+  vals[i, ] <- c(var_name, c, lci, uci, exp(c), exp(lci), exp(uci), lqp, uqp, exp(lqp), exp(uqp))
+  
+  # hist of diffs
+  print(hist(diffs[, var_name])) # Check reasonableness of bootstrap distributions
+}
+print(vals)
+write.csv(vals, "plots/thesis-cox-coefs-precision-weighted-with-meas-err-adjustment.csv")
+```
