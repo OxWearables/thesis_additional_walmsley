@@ -117,7 +117,13 @@ exc_rm <- rbind(exc_rm,
 #---------------------
 print(exc_rm)
 ```
-
+Look at time gaps: 
+```{r}
+min(as.double(as.Date(df_rm$file.startTime_s1) - as.Date(df_rm$file.startTime_s0)), na.rm = T)/365.25
+max(as.double(as.Date(df_rm$file.startTime_s1) - as.Date(df_rm$file.startTime_s0)), na.rm = T)/365.25
+min(as.double(as.Date(df_rm$file.startTime_s4) - as.Date(df_rm$file.startTime_s0)), na.rm = T)/365.25
+max(as.double(as.Date(df_rm$file.startTime_s4) - as.Date(df_rm$file.startTime_s0)), na.rm = T)/365.25
+```
 
 # Repeated measurements data prep
 - Add ilr transformed variables:
