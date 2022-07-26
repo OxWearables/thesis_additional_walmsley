@@ -249,6 +249,9 @@ for (i in 0:4) {
         lambda_lin <-
         calc_lambda(varclean,
                     data = df_rm,
+                    suffix_baseline = "_s0", 
+                    suffix_rep = c("_s1", "_s2", "_s3", "_s4"), 
+                    exclusion_indic = "excluded",
                     covariates = c("sex", "age_entry"))
       tab_out[(1 + j), "Lambda (SE)"] <-
         paste0(round_2_dp(lambda_lin[[1]]),
@@ -582,15 +585,22 @@ vals <- data.frame(matrix(nrow = 4, ncol = 11))
 colnames(vals) <- c("Variable", "Estimate", "Lower_CI", "Upper_CI", "HR", "HR_Lower_CI", "HR_Upper_CI", "Lower_CI_percentile", "Upper_CI_percentile",  "HR_Lower_CI_percentile", "HR_Upper_CI_percentile")
 for (i in 1:length(rot_list)){
   var_name <- colnames(ests)[i]
+  
+  # basic/empirical/reverse percentile
   lq <- quantile(diffs[, var_name], 0.025)
   uq <- quantile(diffs[, var_name], 0.975)
   c <- coefs[, var_name]
-  uci <- c - lq # These all need checking against notes XXX
+  uci <- c - lq 
   lci <- c - uq
   
+  # percentile
   lqp <- quantile(ests[, var_name], 0.025)
   uqp <- quantile(ests[, var_name], 0.975)
+  
+  # return 
   vals[i, ] <- c(var_name, c, lci, uci, exp(c), exp(lci), exp(uci), lqp, uqp, exp(lqp), exp(uqp))
+  
+  # hist of diffs
   print(hist(diffs[, var_name])) # Check reasonableness of bootstrap distributions
 }
 print(vals)
