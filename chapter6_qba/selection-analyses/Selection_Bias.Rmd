@@ -313,15 +313,6 @@ var_list_imp <-
     "log_Triglycerides"
   )
 
-# Check ordering of factors has worked (needed for imputation)
-for (var in var_list_imp){
-  print(var)
-  print(class(df_all[, var]))
-  if ("factor" %in% class(df_all[, var])){
-    print(is.ordered(df_all[, var]))
-  }
-} 
-
 # Print sum of variables to use
 var_sum <- paste0(var_list_imp[2:length(var_list_imp)], collapse = "+") # get the variables for use in models
 ```
