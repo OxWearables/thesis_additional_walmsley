@@ -337,6 +337,7 @@ print(Sys.time())
 Look at properties of imputation: 
 ```{r}
 plot(imp)
+imp$meth
 ```
 
 Model in whole dataset: 
@@ -790,6 +791,7 @@ print(Sys.time())
 Look at properties of imputation: 
 ```{r}
 plot(imp_rest)
+imp_rest$meth
 ```
 
 Model :
