@@ -397,9 +397,8 @@ for (i in 1:5){
   lp_glm[, paste0("lp_", i)] <- loc_p # Merge in to recording data frame
   
   # Consider model assumptions
-  cat("max VIF:", max(car::vif(loc_glm))) ## variance inflation
-  # The large VIFs are to do with the two variables 
-  
+  cat("max VIF:", max(car::vif(loc_glm)$GVIF)) ## variance inflation
+
   ## Consider whether the logit as a linear function of the variable looks reasonable
   # num_vars <-   c( 
   #   "baseline_age_ten_years",
@@ -534,6 +533,7 @@ for (i in 1:length(vs)) {
 names(vars_table_labels) <- vs
 ```
 
+
 Prepare to write table:
 ```{r}
 # CATEGORICAL RENDERER
@@ -582,6 +582,40 @@ write(t,
      "plots/selection-wts.tex")
 
 
+```
+
+
+
+More d.p. table: 
+```{r}
+# CONTINUOUS RENDERER
+my_render_cont <- function(x){
+  with(
+    stats.apply.rounding(stats.default(x), digits = 5),
+    c(
+      "",
+      `Mean (SD)` = sprintf("%s (%s)", MEAN, SD),
+      `Median [Q1, Q3]` = sprintf("%s [%s, %s]",
+                                    MEDIAN, Q1, Q3)
+    )
+  )
+}
+
+tab_wts <-
+  table1(c(split(df_in, df_in$inverse_wt_quarters), list("Overall" = df_in)),
+    labels = list(variables = vars_table_labels),
+    render.categorical = my_render_cat, 
+    render.cont = my_render_cont
+  )
+t <-
+  t1kable(
+    tab_wts,
+    format = "latex",
+    booktabs = TRUE,
+    longtable = TRUE
+  )
+write(t,
+     "plots/selection-wts-extra-dp.tex")
 ```
 
 # Modelling
