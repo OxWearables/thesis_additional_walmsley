@@ -806,8 +806,7 @@ for (var in names(rot_list)){
 
 # Check regression calibration functions 
 
-# Regression calibration procedure
-## Regression calibration in full dataset
+# Use slower functions for regression calibration: 
 ```{r}
 coefs_check <- data.frame(matrix(nrow = 1, ncol = 4))
 colnames(coefs_check) <- paste0(names(rot_list), "_pivot1")
