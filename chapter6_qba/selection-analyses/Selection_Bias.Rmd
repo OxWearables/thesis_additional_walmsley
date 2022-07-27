@@ -813,7 +813,7 @@ pool_model_rest <- pool(log_inc_rest)
 mod_coef_rest <-
   summary(pool_model_rest, conf.int = TRUE, exponentiate = TRUE)[, c("term", "estimate", "2.5 %", "97.5 %")]
 tab_wt_model_f_rest <-
-  cbind(mod_coef_rest[, 1, drop = FALSE], format(round(mod_coef_rest[, 2:4], digits = 4), nsmall = 4))
+  cbind(mod_coef_rest[, 1, drop = FALSE], format(round(mod_coef_rest[, 2:4], digits = 2), nsmall = 2))
 tab_wt_model_f_rest$`OR (CI)` <-
   paste0(tab_wt_model_f_rest[, 2],
          " (",
@@ -828,7 +828,7 @@ t_rest <-
     booktabs = TRUE,
     longtable = TRUE
   )
-write(t_rest, "plots/table-weight-model-restricted.tex")
+write(t_rest, "plots/table-weight-model-restricted-2dp.tex")
 ```
 
 Do logistic regression model in each imputed dataset:
