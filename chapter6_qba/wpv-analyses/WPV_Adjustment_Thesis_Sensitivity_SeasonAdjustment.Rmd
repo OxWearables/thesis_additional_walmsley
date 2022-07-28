@@ -361,11 +361,33 @@ Compare with and without season adjustment
 coefs <- data.frame(matrix(nrow = 1, ncol = 0))
 coefs_record <- data.frame(matrix(nrow = 1, ncol = 0))
 
+vals_old <- data.frame(matrix(nrow = 4, ncol = 4))
+colnames(vals_old) <-
+  c("Variable", "HR", "HR_Lower_CI", "HR_Upper_CI")
+vals_old$Variable <- paste0(names(rot_list), "_pivot1")
+
 for (var in names(rot_list)) {
   # Find names of variables
   form_vars <-
     colnames(df_rm)[grepl(paste0(var, "z"), colnames(df_rm))]
   form_vars <- unique(gsub("_(.*)", "", form_vars))
+  
+  # Unadulterated Cox model
+  form_vars_old <- paste0(form_vars, "_s0")
+  form_sum_old <-  paste0(form_vars_old, collapse = "+")
+  cox_basic <-
+    coxph(formula(
+      paste0(
+        "Surv(age_entry, age_exit, CVD_event) ~ ",
+        form_sum_old,
+        "+ strata(sex)+
+  ethnicity + smoking + alcohol + fruit_and_veg_cats + oily_fish + red_and_processed_meat_cats + education_cats + TDI_quartiles"
+      )
+    ), data = df)
+  
+  # Assign Cox model, outputs
+  vals_old[vals_old$Variable == paste0(var, "_pivot1"), ] <-
+    c(paste0(var, "_pivot1"), summary(cox_basic)$conf.int[1, c(1, 3:4)])
   
   # Make all predictive models
   # WITHOUT SEASON
@@ -453,6 +475,7 @@ for (var in names(rot_list)) {
   coefs[, paste0(var, "_pivot1_month_of_year_", c("HR", "HR_Lower_CI", "HR_Upper_CI"))] <- exp(c(coef, coef - 1.96*se, coef + 1.96*se))
   coefs_record[, paste0(var, "_pivot1")] <-
     summary(cox_mod_month_of_year)$coefficients[1, 1]
+  assign(paste0("cox_mod_month", var), cox_mod)
   rm(coef, se)
   
   
@@ -611,7 +634,7 @@ for (i in 1:length(rot_list)) {
   
   # Calculate HRs associated with difference
   HRs <- as.double(vals[vals$Variable == var_name_pivot, c("HR", "HR_Lower_CI", "HR_Upper_CI")]) ^ ilr_diff
-  ev_nums <- get_ev_nums(get(paste0("cox_mod", comp_name)))
+  ev_nums <- get_ev_nums(get(paste0("cox_mod_month", comp_name)))
   rec_dat[(i - 1) * 2 + 1,] <- c(comp_name, diff, "measurement_adjusted", HRs, ev_nums)
   rm(HRs, ev_nums)
   

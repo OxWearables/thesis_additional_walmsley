@@ -430,6 +430,8 @@ for (var in names(rot_list)) {
   coefs[, paste0(var, "_pivot1_weighted", c("HR", "HR_Lower_CI", "HR_Upper_CI"))] <- exp(c(coef, coef - 1.96*se, coef + 1.96*se))
   coefs_record[, paste0(var, "_pivot1")] <-
     summary(cox_mod_weighted)$coefficients[1, 1]
+  # Assign Cox model, outputs
+  assign(paste0("cox_mod_weighted", var), cox_mod_weighted)
   rm(coef, se)
   
 }
@@ -587,7 +589,7 @@ for (i in 1:length(rot_list)) {
   
   # Calculate HRs associated with difference
   HRs <- as.double(vals[vals$Variable == var_name_pivot, c("HR", "HR_Lower_CI", "HR_Upper_CI")]) ^ ilr_diff
-  ev_nums <- get_ev_nums(get(paste0("cox_mod", comp_name)))
+  ev_nums <- get_ev_nums(get(paste0("cox_mod_weighted", comp_name)))
   rec_dat[(i - 1) * 2 + 1,] <- c(comp_name, diff, "measurement_adjusted", HRs, ev_nums)
   rm(HRs, ev_nums)
   
