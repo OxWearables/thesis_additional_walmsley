@@ -106,8 +106,7 @@ for (var in c("baseline_age", var_list_minus_age)){
      ref <- as.character(tab$Var[tab$Freq == max(tab$Freq)])
      df_all[, var] <- relevel(factor(df_all[, var]), ref = ref)
    }
-  # No longer do this for ordered factors as will force factors to be ordered factors 
-  
+ 
   # Examine distributions of continuous variables---------------------------------------------------------------------------
   if (var %in% c("baseline_age", "BMI", "TownsendDeprIndexRecruit", vars_biom_tab_only, vars_sr_act[c(1, 2, 3)])){
     
@@ -398,7 +397,7 @@ for (i in 1:5){
   lp_glm[, paste0("lp_", i)] <- loc_p # Merge in to recording data frame
   
   # Consider model assumptions
-  cat("max VIF:", max(car::vif(loc_glm)$GVIF)) ## variance inflation
+  cat("max VIF:", max(car::vif(loc_glm)[, "GVIF"])) ## variance inflation
 
   ## Consider whether the logit as a linear function of the variable looks reasonable
   # num_vars <-   c( 
@@ -459,7 +458,7 @@ df_in$inverse_wt_stab_trim <- ifelse(df_in$inverse_wt_stab > qt, qt, df_in$inver
 # Descriptive tables to understand behaviour of weights
 Set up variables for table: 
 ```{r}
-df_in$pa <- df_in$acc.overall.avg
+df_in$pa <- df_in$acc.overall.avg # df_in$OveralAccelerAverag
 df_in$age_entry_years <- as.double(df_in$age_entry)/365.25
 df_in <- merge(df_in, df_all[, c("eid", vars_biom_tab_only, vars_sr_act,  "Category_METmin_walking", 
     "Category_METmin_MPA",
@@ -684,7 +683,8 @@ for (i in 1:length(rot_list)) {
   ev_nums <- get_ev_nums(cox_mod_weighted)
   rec_dat[(i - 1) * 2 + 2,] <- c(comp_name, diff, "weighted", HRs, ev_nums)
   rm(HRs, ev_nums)
-}
+  
+  }
 ```
 
 
@@ -1077,6 +1077,8 @@ Still, it's broadly underwhelming.
 
 
 
+
+
 ## Simpler weights
 
 Calculate simpler weights: 
@@ -1086,11 +1088,14 @@ df_all$inverse_wt_simple <- 1 / df_all$selec_prob
 # Add to analytic data
 df_in <-
   merge(df_in, df_all[, c("eid", "inverse_wt_simple")], by = "eid")
+
+qtsimple <- quantile(df_in$inverse_wt_simple, 0.99)
+df_in$inverse_wt_simple_trim <- ifelse(df_in$inverse_wt_simple > qtsimple, qtsimple, df_in$inverse_wt_simple)
 ```
 
 Cox model:
 ```{r}
-rec_dat <- make_rec_dat_frame(16)
+rec_dat <- make_rec_dat_frame(20)
 
 for (i in 1:4) {
   # set up-----------------------------------------------------
@@ -1123,7 +1128,7 @@ for (i in 1:4) {
   assign(paste0("cox_", comp_name), cox_mod_simple)
   HRs <- calc_HRs(model = cox_mod_simple, row = "piv1", ilr_diff = ilr_diff)
   ev_nums <- get_ev_nums(cox_mod_simple)
-  rec_dat[(i - 1) * 4 + 1,] <- c(comp_name, diff, "unweighted", HRs, ev_nums)
+  rec_dat[(i - 1) * 5 + 1,] <- c(comp_name, diff, "unweighted", HRs, ev_nums)
   rm(HRs, ev_nums)
   
   
@@ -1142,7 +1147,25 @@ for (i in 1:4) {
   assign(paste0("cox_weighted_", comp_name), cox_mod_weighted)
   HRs <- calc_HRs(model = cox_mod_weighted, row = "piv1", ilr_diff = ilr_diff)
   ev_nums <- get_ev_nums(cox_mod_weighted)
-  rec_dat[(i - 1) * 4 + 2,] <- c(comp_name, diff, "weighted", HRs, ev_nums)
+  rec_dat[(i - 1) * 5 + 2,] <- c(comp_name, diff, "weighted", HRs, ev_nums)
+  rm(HRs, ev_nums)
+  
+      # Weighted Cox model, simple weights---------------------------------------- 
+  cox_mod_simple_weights_trim <- coxph(
+    Surv(age_entry, age_exit, CVD_event) ~
+      strata(sex) + ethnicity + smoking + alcohol +
+      fruit_and_veg_cats + oily_fish +
+      red_and_processed_meat_cats + education_cats +
+      TDI_quartiles +
+      piv1 + piv2 + piv3, weights = inverse_wt_simple_trim,
+    data = loc, id = eid, robust = TRUE # see notes on coxph function, robust = TRUE (i.e. robust SEs) needed if weights are sampling weights.
+    # This is the most likely place for errors in this code 
+    # But it seemes that coxph with weights and robust = TRUE treats weights as sampling weights
+  )
+  assign(paste0("cox_simple_weights_trim_", comp_name), cox_mod_simple_weights_trim)
+  HRs <- calc_HRs(model = cox_mod_simple_weights_trim, row = "piv1", ilr_diff = ilr_diff)
+  ev_nums <- get_ev_nums(cox_mod_simple_weights_trim)
+  rec_dat[(i - 1) * 5 +3,] <- c(comp_name, diff, "simple_weights_trim", HRs, ev_nums)
   rm(HRs, ev_nums)
   
     # Weighted Cox model, cluster term---------------------------------------- 
@@ -1159,7 +1182,7 @@ for (i in 1:4) {
   assign(paste0("cox_alt_syntax_", comp_name), cox_mod_alt_syntax)
   HRs <- calc_HRs(model = cox_mod_alt_syntax, row = "piv1", ilr_diff = ilr_diff)
   ev_nums <- get_ev_nums(cox_mod_alt_syntax)
-  rec_dat[(i - 1) * 4 + 3,] <- c(comp_name, diff, "weighted - alt syntax", HRs, ev_nums)
+  rec_dat[(i - 1) * 5 + 4,] <- c(comp_name, diff, "weighted - alt syntax", HRs, ev_nums)
   rm(HRs, ev_nums)
   
   
@@ -1178,7 +1201,7 @@ for (i in 1:4) {
   assign(paste0("cox_simple_weights_", comp_name), cox_mod_simple_weights)
   HRs <- calc_HRs(model = cox_mod_simple_weights, row = "piv1", ilr_diff = ilr_diff)
   ev_nums <- get_ev_nums(cox_mod_simple_weights)
-  rec_dat[(i - 1) * 4 +4,] <- c(comp_name, diff, "simple_weights", HRs, ev_nums)
+  rec_dat[(i - 1) * 5 +5,] <- c(comp_name, diff, "simple_weights", HRs, ev_nums)
   rm(HRs, ev_nums)
 }
 ```
