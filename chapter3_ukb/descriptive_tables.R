@@ -17,7 +17,7 @@
 
 # SETUP
 # Run name ===================
-run_name <- "_20220614"
+run_name <- "_20220511_checks" # On this day I was investigating whether the two identical values in the kappa stability matrices are by chance. Seems that yes. 
 
 ## Packages ===================
 #library(xtable) xtable and table1 cannot be loaded at the same time
@@ -50,9 +50,9 @@ df_analysis <-
 nbef <- nrow(df)
 df <- df[df$p31 != "", ]
 naft <- nrow(df)
-if ((naft - nbef) != -1)
+if ((naft - nbef) != -1){
   stop("Something's changed in input data, wrong number of weird excusions.")
-
+}
 # COLNAMES
 colnames_sorted <- colnames(df)
 fields <-
@@ -323,10 +323,10 @@ df$Self_rated_health <-
   )
 
 # SR activity
-df$Self_reported_MPA <- df$sr_mpa_i0
-df$Self_reported_VPA <- df$sr_vpa_i0
 df$Job_involves_activity <- df$job_activity_i0
 df$Job_involves_walking_standing <- df$job_walk_stand_i0
+df$Self_reported_MPA <- df$sr_mpa_i0
+df$Self_reported_VPA <- df$sr_vpa_i0
 df$Self_reported_MPA[df$sr_any_mpa_days_i0 == "0"] <- 0
 df$Self_reported_VPA[df$sr_any_vpa_days_i0 == "0"] <- 0
 df$Self_reported_usual_walking_pace <- df$usual_walk_pace_i0
@@ -471,6 +471,7 @@ for (i in 1:length(vars_stab)) {
   
   n <- sum(cm$table)
   print(n)
+  print(nrow(df_rep1[!(is.na(df_rep1[, cols[2]])|is.na(df_rep1[, cols[1]])),]))
   
   k <- vcd::Kappa(cm$table, weights = "Fleiss-Cohen")
   k2 <- as.data.frame(confint(k))
