@@ -8,7 +8,9 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-# Set up names
+
+# Set up
+## Set up file location names
 ```{r}
 name_of_current_run <- "selection_third_attempt" # What's changed between second and third attempt is the additional sensitivity analysis
 # NAME WHERE DATA IS
@@ -16,7 +18,7 @@ input_loc <- "../../../../paperRW2021/"
 file_loc_local <- "../../useful_functions/"
 ```
 
-# Load packages
+## Load packages
 ```{r}
 lapply(c("ggplot2", "survival", "table1", "mice"), library, character.only = TRUE)
 fl <- list.files(file_loc_local)
@@ -25,31 +27,59 @@ for (file in fl){
 }
 ```
 
-# Load data 
+## Load data 
+
+This script uses data from three places: 
+
+- Data produced by 'data-preprep-ipw.R' [in current folder]. This is data for the whole dataset processed following same procedure used on the data in earlier chapters.  
+- Data from earlier chapters (defining the analytic sample).
+- Additional data from the processing for Chapter 3 (the descriptive chapter), which contains a few additional columns (those in vars_sr_act and vars_biom_tab_only, mostly related to self-reported activity and biomarkers).
+
 ```{r}
 df_all <- readRDS(paste0("data/", name_of_current_run, "_ready_to_use.RDS"))
 df_in <- readRDS(paste0(input_loc, "epiAnalysis/inputData/2021-06-17check_messages_ready_to_use.RDS"))
 df_other <- readRDS("../../chapter3_ukb/outputs/processed_data_for_sel_bias.RDS")
 ```
 
-# Variable set up 
+## Variable set up 
+
+Setting up lists of variables of different types: 
 ```{r}
-vars_orig <- c("sex", "ethnicity", "smoking", "alcohol", "fruit_and_veg_cats", "red_and_processed_meat_cats", "oily_fish", "TownsendDeprIndexRecruit", "education_cats")
+vars_orig <-
+  c(
+    "sex",
+    "ethnicity",
+    "smoking",
+    "alcohol",
+    "fruit_and_veg_cats",
+    "red_and_processed_meat_cats",
+    "oily_fish",
+    "TownsendDeprIndexRecruit",
+    "education_cats"
+  )
+
 vars_health_orig <- c("BMI", "poor_health", "meds")
-vars_sr_act <-   c("Self_reported_MET_minutes_walking",
-                   "Self_reported_MET_minutes_MPA",
-                   "Self_reported_MET_minutes_VPA",
+
+vars_sr_act <-   c(
+  "Self_reported_MET_minutes_walking",
+  "Self_reported_MET_minutes_MPA",
+  "Self_reported_MET_minutes_VPA",
   "Job_involves_walking_standing",
-  "Job_involves_activity", 
-  "Self_reported_usual_walking_pace")
-vars_biom_tab_only <- c( "Systolic_blood_pressure",
+  "Job_involves_activity",
+  "Self_reported_usual_walking_pace"
+)
+
+vars_biom_tab_only <- c(
+  "Systolic_blood_pressure",
   "HbA1c",
   "C_Reactive_Protein",
   "LDL_cholesterol",
   "HDL_cholesterol",
-  "Triglycerides")
+  "Triglycerides"
+)
 
-var_list_minus_age <- c(vars_orig, vars_health_orig, vars_sr_act, vars_biom_tab_only)
+var_list_minus_age <-
+  c(vars_orig, vars_health_orig, vars_sr_act, vars_biom_tab_only)
 
 rot_list <- list(
   "sleep" = c("sleep", "SB", "LIPA", "MVPA"),
@@ -61,30 +91,40 @@ rot_list <- list(
 cm <- epicoda::comp_mean(df_in, rot_list[[1]])
 ```
 
-# Deal with job status 
+## Deal with job status 
+
+This was a little bit of code to process job-related variables, which are only present in people with a job.
+
+Note: I believe this isn't actually now used anywhere. 
 ```{r}
 emp_status <- rep(NA, times = nrow(df_other))
-emp_status[grepl("In paid employment or self-employed", df_other$employed_i0)] <- "Employed"
-emp_status[!grepl("In paid employment or self-employed", df_other$employed_i0) & (grepl( "Retired|Looking after home and/or family|Unemployed|Unable to work because of sickness or disability|Doing unpaid or voluntary work|Full or part-time student", df_other$employed_i0))] <- "Not_employed"
+
+in_emp <- grepl("In paid employment or self-employed", df_other$employed_i0)
+not_in_emp <- !in_emp &  grepl("Retired|Looking after home and/or family|Unemployed|Unable to work because of sickness or disability|Doing unpaid or voluntary work|Full or part-time student", df_other$employed_i0)
+
+emp_status[in_emp] <-  "Employed"
+emp_status[not_in_emp] <- "Not_employed"
 emp_status[!(emp_status %in% c("Employed", "Not_employed"))] <- NA
 
-for (var in vars_sr_act[4:5]){
+for (var in vars_sr_act[4:5]) {
   df_other[, var][emp_status == "Not_employed"] <- "Not_in_employment"
-  }
+  # This seems to work as expected for NA variables but ideally would have careful NA treatment
+}
 ```
 
-# Merge additional columns into df_all
+## Merge additional columns into df_all
 ```{r}
-df_all <- merge(df_all, df_other[,c(
-  "eid", vars_sr_act, vars_biom_tab_only)], by = "eid", all.x = TRUE) # We are left joining here because df_all has already had exclusion of people with prevalent CVD
+df_all <- merge(df_all,
+                df_other[, c("eid", vars_sr_act, vars_biom_tab_only)],
+                by = "eid", all.x = TRUE)
+# We are left joining here because df_all has already had exclusion of people with prevalent CVD
 ```
 
-Note we do have an interesting question about prevalent CVD, because there could be people who "shouldn't" be here because they either have CVD or die before the start of the accelerometry study. 
-
-- Some studies do exclude these I think... maybe I should do that. 
-- But, this is a conservative assumption so it's probably ok. 
+Note we do have an interesting question about prevalent CVD, because there could be people who "shouldn't" be here because they either have CVD or die before the start of the accelerometry study i.e. they would never have actually been eligible to be in our eventual cohort. So in this sense we're making an assumption in the analysis. It's *probably* a conservative assumption as they're probably generally sicker. So further upweighting people with similar characteristics is probably generally reasonable. However, (*solution*) we'll also do a sensitivity analysis later for people who had had CVD or died before start of accelerometry (see below).
 
 # Calculate weights
+
+## Preprocessing
 Add indicator variable of presence in analytic dataset: 
 ```{r}
 df_all$in_analytic_sample <- df_all$eid %in% df_in$eid
@@ -95,43 +135,76 @@ Do some preprocessing to:
 - ensure consistent treatment of missingness
 - visualise continuous variables and add a log-transformed version  
 ```{r}
-for (var in c("baseline_age", var_list_minus_age)){
-  
+for (var in c("baseline_age", var_list_minus_age)) {
   print(var)
+  
+  # Relabel empty strings as missing----------------------------------------
   df_all[, var][df_all[, var] == ""] <- NA
   
   # Relevel factors for modelling to make ref the largest category----------------------------------------------------------
-  if (!(var %in% c("baseline_age", "BMI", "TownsendDeprIndexRecruit", vars_biom_tab_only, vars_sr_act[c(1, 2, 3)]))){
-     tab <- as.data.frame(table(df_all[, var]))
-     ref <- as.character(tab$Var[tab$Freq == max(tab$Freq)])
-     df_all[, var] <- relevel(factor(df_all[, var]), ref = ref)
-   }
- 
+  if (!(
+    var %in% c(
+      "baseline_age",
+      "BMI",
+      "TownsendDeprIndexRecruit",
+      vars_biom_tab_only,
+      vars_sr_act[c(1, 2, 3)]
+    )
+  )) {
+    tab <- as.data.frame(table(df_all[, var]))
+    ref <- as.character(tab$Var[tab$Freq == max(tab$Freq)])
+    df_all[, var] <- relevel(factor(df_all[, var]), ref = ref)
+  }
+  
   # Examine distributions of continuous variables---------------------------------------------------------------------------
-  if (var %in% c("baseline_age", "BMI", "TownsendDeprIndexRecruit", vars_biom_tab_only, vars_sr_act[c(1, 2, 3)])){
-    
-    # Consider distribution of continuous variables ------------------------------------------------------------------------
+  if (var %in% c(
+    "baseline_age",
+    "BMI",
+    "TownsendDeprIndexRecruit",
+    vars_biom_tab_only,
+    vars_sr_act[c(1, 2, 3)]
+  )) {
+    # Plot distribution of continuous variables ------------------------------------------------------------------------
     print(hist(as.numeric(df_all[, var]), main = var))
     print(hist(log(as.numeric(df_all[, var]) + .1), main = paste0("log(x+.1)" , var)))
     print(min(as.numeric(df_all[, var])))
     
     # Add log-transformed variables to data frame where may be appropriate (currently over-generous) -----------------------
-    if (min(as.numeric(df_all[, var]), na.rm = TRUE) == 0){
-      df_all[, paste0("log_1plus_", var)] <- log(as.numeric(df_all[, var]) + 1)
+    if (min(as.numeric(df_all[, var]), na.rm = TRUE) == 0) {
+      df_all[, paste0("log_1plus_", var)] <-
+        log(as.numeric(df_all[, var]) + 1)
     } else {
-    df_all[, paste0("log_", var)] <- log(as.numeric(df_all[, var]))
-  }
+      df_all[, paste0("log_", var)] <- log(as.numeric(df_all[, var]))
+    }
   }
 }
+
+# Add age per ten years variable
 df_all$baseline_age_ten_years <- as.double(df_all$baseline_age)/(365.25*10)
 
+# Coerce numeric where relevant
 for (var in vars_sr_act[1:3]){
   df_all[, var] <- as.double(df_all[, var])
-}
+} # This may relabel special values as NA
 
-df_all$Category_METmin_walking <-  cut(df_all$Self_reported_MET_minutes_walking, c(-1, 0.5, 500.5, 1000.5, 20000 ), labels = c("No walking", "1-500", "501-1000", "1001+"))
-df_all$Category_METmin_MPA <-  cut(df_all$Self_reported_MET_minutes_MPA, c(-1, 0.5, 500.5, 1000.5, 20000 ), labels = c("No moderate activity", "1-500", "501-1000", "1001+"))
-df_all$Category_METmin_VPA <-  cut(df_all$Self_reported_MET_minutes_VPA, c(-1, 0.5, 500.5, 1000.5, 20000 ), labels = c("No vigorous activity", "1-500", "501-1000", "1001+"))
+df_all$Category_METmin_walking <-
+  cut(
+    df_all$Self_reported_MET_minutes_walking,
+    c(-1, 0.5, 500.5, 1000.5, 20000),
+    labels = c("No walking", "1-500", "501-1000", "1001+")
+  )
+df_all$Category_METmin_MPA <-
+  cut(
+    df_all$Self_reported_MET_minutes_MPA,
+    c(-1, 0.5, 500.5, 1000.5, 20000),
+    labels = c("No moderate activity", "1-500", "501-1000", "1001+")
+  )
+df_all$Category_METmin_VPA <-
+  cut(
+    df_all$Self_reported_MET_minutes_VPA,
+    c(-1, 0.5, 500.5, 1000.5, 20000),
+    labels = c("No vigorous activity", "1-500", "501-1000", "1001+")
+  )
 ```
 
 I considered using the following code to force ordering of factors. However, on reflection this may excessively constrain the nature of the relationships between categories, and so for all imputation and modelling they will be treated as unordered. 
@@ -277,9 +350,10 @@ I considered using the following code to force ordering of factors. However, on 
 #   )
 ```
 
+## Logistic regression model
 Set up for logistic regression model: 
 
-- Note I have got rid of job involves walking/standing variables as they are not that helpful and are causing a mess for imputation because of logical dependencies
+- Note: I have got rid of job involves walking/standing variables as they are not that helpful and are causing a mess for imputation because of logical dependencies (they share a category of not being employed)
 ```{r}
 # List variables with log transformation where appropriate
 var_list_imp <-
@@ -338,8 +412,7 @@ Look at properties of imputation:
 plot(imp)
 imp$meth
 ```
-
-Model in whole dataset: 
+Logistic regression model in whole dataset: 
 ```{r}
 # Do model for each imputed dataset
 log_inc <-
@@ -378,7 +451,7 @@ t <-
 write(t, "plots/table-weight-model.tex")
 ```
 
-Do logistic regression model in each imputed dataset:
+Do logistic regression model in each imputed dataset and return linear predictor of probability of inclusion for each participant:
 ```{r}
 lp_glm <- data.frame(matrix(nrow = nrow(df_all), ncol = 0)) # set up dataframe to record
 
@@ -390,7 +463,7 @@ for (i in 1:5){
   print(nrow(loc_dat))
   
   # Generate model 
-  loc_glm <-glm(
+  loc_glm <- glm(
     as.formula(paste0("in_analytic_sample ~ ", var_sum)),
     family = binomial, data = loc_dat)
   loc_p <- predict(loc_glm, newdata =loc_dat, type = "link") # Predict on link scale 
@@ -399,7 +472,7 @@ for (i in 1:5){
   # Consider model assumptions
   cat("max VIF:", max(car::vif(loc_glm)[, "GVIF"])) ## variance inflation
 
-  ## Consider whether the logit as a linear function of the variable looks reasonable
+  ## Consider whether the logit as a linear function of the variable looks reasonable (commented out due to time taken to run)
   # num_vars <-   c( 
   #   "baseline_age_ten_years",
   #   "BMI",
@@ -424,23 +497,29 @@ for (i in 1:5){
 }
 
 
-lp_av <- apply(lp_glm, 1, mean)
-p_av <- exp(lp_av)/(1+exp(lp_av))
+lp_av <- apply(lp_glm, 1, mean) # Take mean of linear predictors across all 5 imputations + models
+p_av <- exp(lp_av)/(1+exp(lp_av)) # Invert logit transformation
 
 df_all$selec_prob <- p_av
 ```
 
 ... There could be an issue if there is any scrambling of rows, but we should be able to see this from table. 
 
+## Post processing of weights
+
 Calculate Stabilised Trimmed Inverse Probability of Selection Weights: 
+
+- Stabilisation shouldn't impact analytic results in model (shown later in this markdown), as these are invariant to multiplication by a constant. However, it will ensure weights are on a sensible, easy to read scale. I think it's more important when IPW used for confounding (?), but I don't know about this context.
+- Trimming just ensures outlyingly high weights don't influence too much.
 ```{r}
 selec_prob_all <-
-  nrow(df_in) / nrow(df_all) # Everyone in df_all should be included in model due to imputation
-df_all$inverse_wt_stab <- selec_prob_all / df_all$selec_prob # Stabilisation
+  nrow(df_in) / nrow(df_all) # Look at overall probability of inclusion (everyone in df_all should be included in model due to imputation)
+df_all$inverse_wt_stab <- selec_prob_all / df_all$selec_prob 
 
 # Add to analytic data
 df_in <-
   merge(df_in, df_all[, c("eid", "inverse_wt_stab", "selec_prob", vars_sr_act,  vars_biom_tab_only)], by = "eid")
+
 
 summary(df_all$inverse_wt_stab)
 
@@ -455,12 +534,13 @@ qt <- quantile(df_in$inverse_wt_stab, 0.99)
 df_in$inverse_wt_stab_trim <- ifelse(df_in$inverse_wt_stab > qt, qt, df_in$inverse_wt_stab)
 ```
 
-# Descriptive tables to understand behaviour of weights
+## Descriptive tables to understand behaviour of weights
 Set up variables for table: 
 ```{r}
-df_in$pa <- df_in$acc.overall.avg # df_in$OveralAccelerAverag
+df_in$pa <- df_in$acc.overall.avg # df_in$OveralAccelerAverag is maybe a better option here to truly match returned UKB data
 df_in$age_entry_years <- as.double(df_in$age_entry)/365.25
-df_in <- merge(df_in, df_all[, c("eid", vars_biom_tab_only, vars_sr_act,  "Category_METmin_walking", 
+df_in <- merge(df_in, 
+               df_all[, c("eid", vars_biom_tab_only, vars_sr_act,  "Category_METmin_walking", 
     "Category_METmin_MPA",
     "Category_METmin_VPA", 
     "Self_reported_usual_walking_pace")], all.x = TRUE)
@@ -618,7 +698,7 @@ write(t,
      "plots/selection-wts-extra-dp.tex")
 ```
 
-# Modelling
+# Cox modelling
 
 ## Run weighted Cox model
 ```{r}
@@ -763,14 +843,15 @@ dev.off()
 
 
 
-# Sensitivity 
+# Sensitivity analysis: redo everything in restricted cohort
 
+## Restrict cohort
 Restricted cohort: 
 ```{r}
 df_res <- df_all[df_all$in_restricted_cohort, ]
 print(nrow(df_res))
 ```
-
+## Imputation
 Imputation: 
 ```{r}
 print(Sys.time())
@@ -794,6 +875,7 @@ plot(imp_rest)
 imp_rest$meth
 ```
 
+## Logistic regression for weights
 Model :
 ```{r}
 # Do model for each imputed dataset
@@ -832,6 +914,7 @@ write(t_rest, "plots/table-weight-model-restricted-2dp.tex")
 ```
 
 Do logistic regression model in each imputed dataset:
+
 ```{r}
 lp_glm_rest <- data.frame(matrix(nrow = nrow(df_res), ncol = 0)) # set up dataframe to record
 
@@ -860,7 +943,7 @@ p_av_rest <- exp(lp_av_rest)/(1+exp(lp_av_rest))
 df_res$selec_prob <- p_av_rest
 ```
 
-
+## Calculate weights
 Calculate Stabilised Trimmed Inverse Probability of Selection Weights: 
 ```{r}
 selec_prob_all_rest <-
@@ -871,7 +954,7 @@ df_res$inverse_wt_stab_rest <- selec_prob_all_rest / df_res$selec_prob # Stabili
 df_in <-
   merge(df_in, df_res[, c("eid", "inverse_wt_stab_rest", "selec_prob", vars_sr_act,  vars_biom_tab_only)], by = "eid")
 
-if (nrow(df_in)!= 87498){
+if (nrow(df_in)!= 87498){ # This is just checking that everyone in df_in is in df_res (i.e. the merge worked), which should be the case based on the conditions used to define the restricted dataset
   stop("error in input dataset")
 }
 
@@ -880,7 +963,6 @@ if (nrow(df_in)!= 87498){
 qt <- quantile(df_in$inverse_wt_stab_rest, 0.99)
 df_in$inverse_wt_stab_trim_rest <- ifelse(df_in$inverse_wt_stab_rest > qt, qt, df_in$inverse_wt_stab_rest)
 ```
-
 
 Look at comparison between these weights and other weights: 
 ```{r}
@@ -1040,7 +1122,9 @@ dev.off()
 
 
 
-## Additional checks: concern - weighting never makes a difference
+# Additional checks
+
+## Concern - weighting never makes a difference
 This isn't always true:
 ```{r}
 summary(cox_mod_simple)
@@ -1079,7 +1163,11 @@ Still, it's broadly underwhelming.
 
 
 
-## Simpler weights
+## Different ways of achieving same end
+
+- unstabilised trimmed weights (expect identical)
+- alternative syntax (expect identical)
+- unstabilised untrimmed weights (expect similar)
 
 Calculate simpler weights: 
 ```{r}
