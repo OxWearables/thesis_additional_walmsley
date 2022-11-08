@@ -17,8 +17,12 @@ file_loc_local <- "../../useful_functions/"
 
 # Load packages and functions written elsewhere
 ```{r loading-packages}
-lapply(c("ggplot2", "survival", "table1", "epicoda", "EValue"), library, character.only = TRUE) # Note version of epicoda: devtools::install_github("activityMonitoring/epicoda", ref = "fedd06114d664cfcd4087e6620b672e111f37ef0")
-
+library(ggplot2)
+library(survival)
+library(ggplot2)
+library(table1)
+library(epicoda)# Note version of epicoda: devtools::install_github("activityMonitoring/epicoda", ref = "fedd06114d664cfcd4087e6620b672e111f37ef0")
+library(EValue)
 
 fl <- list.files(file_loc_local)
 for (file in fl){
