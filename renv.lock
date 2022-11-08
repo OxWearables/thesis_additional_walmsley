@@ -1228,6 +1228,24 @@
         "nlme"
       ]
     },
+    "mice": {
+      "Package": "mice",
+      "Version": "3.14.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "437fa44664cf8e2dd07b9a70ec65d969",
+      "Requirements": [
+        "Rcpp",
+        "broom",
+        "cpp11",
+        "dplyr",
+        "generics",
+        "lattice",
+        "rlang",
+        "tidyr",
+        "withr"
+      ]
+    },
     "mime": {
       "Package": "mime",
       "Version": "0.12",
