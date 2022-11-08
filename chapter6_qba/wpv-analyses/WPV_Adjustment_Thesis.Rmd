@@ -796,7 +796,7 @@ for (var in names(rot_list)){
     pred <- predict(lambda_lin, df_rm)
     print(length(pred))
     print(cor(pred, as.double(df_rm$age_entry)))
-    }
+    
   # Plot
   plot(lambda_lin)
    }
