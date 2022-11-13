@@ -34,7 +34,7 @@ source("useful_functions/round_2_dp.R")
 # READ DATA ===================
 df <-
   data.frame(data.table::fread("data/thesis-phenoData-20220124.csv")) 
-df2 <- data.frame(data.table::fread("data/data_vig_20220615.csv")) # This adds in variables needed for self-reported vigorous
+df2 <- data.frame(data.table::fread("data/data_vig_20220615.csv")) # This adds in variables needed for self-reported vigorous (not actually now used - see below)
 df3 <- data.frame(data.table::fread("data/data_met_minutes_20220705.csv"))
 df3$p31 <- NULL
 df <- merge(df, df2[, ], by = "eid")
@@ -68,8 +68,8 @@ fields <-
     "bmi" = 21001,
     "tdi" = 189,
     "qual" = 6138,
-    "sr_mpa" = 894,
-    "sr_vpa" = 914,
+    "sr_mpa" = 894, # I don't actually use these variables in favour of 22037 to 22039 (IPAQ vars - they are not as simple as they seem)
+    "sr_vpa" = 914, # I don't actually use these variables in favour of 22037 to 22039
     "job_walk_stand" = 806,
     "job_activity" = 816,
     "shift_work" = 826,
@@ -99,8 +99,8 @@ fields <-
     "sr_health" = 2178, 
     "employed" = 6142, 
     "usual_walk_pace" = 924,
-    "sr_any_mpa_days" = 884, 
-    "sr_any_vpa_days"= 904, 
+    "sr_any_mpa_days" = 884, # I don't actually use these variables in favour of 22037 to 22039
+    "sr_any_vpa_days"= 904,  # I don't actually use these variables in favour of 22037 to 22039
     "sr_metmin_walk" = 22037, 
     "sr_metmin_mpa" = 22038, 
     "sr_metmin_vpa" = 22039 
@@ -325,10 +325,10 @@ df$Self_rated_health <-
 # SR activity
 df$Job_involves_activity <- df$job_activity_i0
 df$Job_involves_walking_standing <- df$job_walk_stand_i0
-df$Self_reported_MPA <- df$sr_mpa_i0
-df$Self_reported_VPA <- df$sr_vpa_i0
-df$Self_reported_MPA[df$sr_any_mpa_days_i0 == "0"] <- 0
-df$Self_reported_VPA[df$sr_any_vpa_days_i0 == "0"] <- 0
+df$Self_reported_MPA <- df$sr_mpa_i0  # I don't actually use these variables in favour of 22037 to 22039 (IPAQ vars - they are not as simple as they seem) 
+df$Self_reported_VPA <- df$sr_vpa_i0  # I don't actually use these variables in favour of 22037 to 22039 (IPAQ vars - they are not as simple as they seem)
+df$Self_reported_MPA[df$sr_any_mpa_days_i0 == "0"] <- 0  # I don't actually use these variables in favour of 22037 to 22039 (IPAQ vars - they are not as simple as they seem)
+df$Self_reported_VPA[df$sr_any_vpa_days_i0 == "0"] <- 0 # I don't actually use these variables in favour of 22037 to 22039 (IPAQ vars - they are not as simple as they seem)
 df$Self_reported_usual_walking_pace <- df$usual_walk_pace_i0
 df$Self_reported_MET_minutes_walking <- df$sr_metmin_walk_i0
 df$Self_reported_MET_minutes_MPA <- df$sr_metmin_mpa_i0

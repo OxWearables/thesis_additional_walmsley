@@ -64,7 +64,7 @@ vars_orig <-
 vars_health_orig <- c("BMI", "poor_health", "meds")
 
 vars_sr_act <-   c(
-  "Self_reported_MET_minutes_walking",
+  "Self_reported_MET_minutes_walking", # NOTE: I'm using the returned variables to define these. But I'm not sure how missing data is determined for these variables, as I find it tricky to post impute. DNK/ PNA/ Unable to walk seem to be sometimes treated as missing and sometimes as 0, but I can't work out the rules exactly. 
   "Self_reported_MET_minutes_MPA",
   "Self_reported_MET_minutes_VPA",
   "Job_involves_walking_standing",
@@ -187,8 +187,8 @@ df_all$baseline_age_ten_years <- as.double(df_all$baseline_age)/(365.25*10)
 
 # Coerce numeric where relevant
 for (var in vars_sr_act[1:3]){
-  df_all[, var] <- as.double(df_all[, var])
-} # This may relabel special values as NA
+   df_all[, var] <- as.double(df_all[, var])
+} # Note that this should no longer be needed as I swapped out time based variables formatted as character for the corresponding MET minute variables (to automatically deal with the difficulties on scales of reporting). It's harmless so I've left it in for traceability. 
 
 df_all$Category_METmin_walking <-
   cut(
@@ -209,6 +209,7 @@ df_all$Category_METmin_VPA <-
     labels = c("No vigorous activity", "1-500", "501-1000", "1001+")
   )
 ```
+Query: on returning to this the missingness patterns of derived IPAQ-based variables are very hard to explain.
 
 I considered using the following code to force ordering of factors. However, on reflection this may excessively constrain the nature of the relationships between categories, and so for all imputation and modelling they will be treated as unordered. 
 ```{r}
@@ -473,6 +474,7 @@ for (i in 1:5){
   lp_glm[, paste0("lp_", i)] <- loc_p # Merge in to recording data frame
   
   # Consider model assumptions
+  print(car::vif(loc_glm))
   cat("max VIF:", max(car::vif(loc_glm)[, "GVIF"])) ## variance inflation
 
   ## Consider whether the logit as a linear function of the variable looks reasonable (commented out due to time taken to run)
