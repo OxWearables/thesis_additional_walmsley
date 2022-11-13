@@ -13,6 +13,8 @@ Particularly:
 - This code is in active development.
 - It is shared as-is to enable scientific reproducibility and 'open science'.
 - This code is not shared for the purpose of general use; any use is strictly at your own risk.
-- In particular, it is not an authoritative source, and has not been reviewed or tested. 
+- In particular, it is not an authoritative source, and has not been reviewed or tested.
+
+Some minor changes have been made to the code for clarity without checking it still runs (see https://github.com/OxWearables/thesis_additional_walmsley/pull/2). 
 
 Please share comments, suggestions and errors/bugs found, either directly on the GitHub page or by emailing rosemary.walmsley@gtc.ox.ac.uk.
