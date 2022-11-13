@@ -1298,7 +1298,9 @@ for (i in 1:4) {
   rec_dat[(i - 1) * 6 +5,] <- c(comp_name, diff, "simple_weights", HRs, ev_nums)
   rm(HRs, ev_nums)
   
-      # Weighted Cox model, weights treated as case weights---------------------------------------- 
+  # Weighted Cox model, weights treated as case weights---------------------------------------- 
+  # I'm not clear this has actually been achieved here, the function documentation is unclear 
+  # See:  https://stats.stackexchange.com/questions/595082/how-do-the-defaults-for-the-weights-argument-and-the-robust-argument-work-in 
   cox_mod_case_weights <- coxph(
     Surv(age_entry, age_exit, CVD_event) ~
       strata(sex) + ethnicity + smoking + alcohol +
