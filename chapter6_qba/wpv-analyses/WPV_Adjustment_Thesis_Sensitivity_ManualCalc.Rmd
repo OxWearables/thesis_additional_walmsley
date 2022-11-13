@@ -11,10 +11,10 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Note location of input files
 ```{r}
-file_loc <- "../../../repeatedMeasurements/R/"
+file_loc <- "../../../Repeated_measurement_error_related/repeatedMeasurements/R/"
 file_loc_local <- "../../useful_functions/"
 input_loc <- "../../../../paperRW2021/"
-input_loc_rm <- "../../../repeatedMeasurementsProcessing/data/59070/"
+input_loc_rm <- "../../../Repeated_measurement_error_related/repeatedMeasurementsProcessing/data/59070/"
 ```
 
 
@@ -220,11 +220,12 @@ for (var in names(rot_list)) {
       paste0(
         "Surv(age_entry, age_exit, CVD_event) ~ ",
         form_sum_old,
-        "+ strata(sex)+
+        "+ strata(sex) +
   ethnicity + smoking + alcohol + fruit_and_veg_cats + oily_fish + red_and_processed_meat_cats + education_cats + TDI_quartiles"
       )
     ), data = df)
   
+  # Manually invert regression calibration using the matrix
   # Make models
   models <- calc_models_multi_single(
     var_names = form_vars,
@@ -236,15 +237,90 @@ for (var in names(rot_list)) {
   )
   
   mat <- models$coefficients
-  inverse_mat_relevant <- solve(mat[25:27,])
+  inverse_mat_relevant <- solve(mat[25:27, ])
   coef_before <- summary(cox_basic)$coefficients[1:3, 1]
   changed_coef <- inverse_mat_relevant %*% coef_before
-  print(comp_name)
+  print(var)
   print(coef_before)
   print(changed_coef)
+  
 }
 ```
 
 These results are nearly, but not quite, identical to what you get doing it the substitute-in way. Similar enough I'm happy they're correct. 
 
-Why wouldn't you expect them to be exact? I think it's to do with differences between the risk sets (?). Need to mull over this more. It could be affected by covariates but I don't think it is. 
+Why aren't they exact? The issue is because we adjust for age by using it as the timescale in the model. If we don't do that, we get identical: 
+
+```{r}
+# Regression calibration procedure
+## Regression calibration in full dataset
+for (var in names(rot_list)) {
+  # Find names of variables
+  form_vars <-
+    colnames(df_rm)[grepl(paste0(var, "z"), colnames(df_rm))]
+  form_vars <- unique(gsub("_(.*)", "", form_vars))
+  
+  # Unadulterated Cox model
+  form_vars_old <- paste0(form_vars, "_s0")
+  form_sum_old <-  paste0(form_vars_old, collapse = "+")
+  cox_basic <-
+    coxph(formula(
+      paste0(
+        "Surv(age_entry, age_exit, CVD_event) ~ ",
+        form_sum_old, "+ age_entry + strata(sex) +
+  ethnicity + smoking + alcohol + fruit_and_veg_cats + oily_fish + red_and_processed_meat_cats + education_cats + TDI_quartiles"
+      )
+    ), data = df)
+  
+    # Cox model with regression calibration
+   # Calculate regression calibration model 
+    models_list <- calc_models_multi(
+    var_names = form_vars,
+    data = df_rm,
+    suffix_baseline = "_s0",
+    suffix_rep = c("_s1", "_s2", "_s3", "_s4"),
+    exclusion_indic = "excluded", 
+    covariates = c("age_entry", "sex", "ethnicity", "smoking", "alcohol", "fruit_and_veg_cats", "oily_fish", "red_and_processed_meat_cats", "education_cats", "TDI_quartiles"))
+  
+  # Make predictions
+  pred_data <-
+    pred_rep(models_list, newdata = df, suffix_pred = "_pred")
+  
+  
+  # Variables for new calculation
+  form_vars_new <- paste0(form_vars, "_pred")
+  form_sum <- paste0(form_vars_new, collapse = "+")
+  
+  cox_repmeas <-
+    coxph(formula(
+      paste0(
+        "Surv(age_entry, age_exit, CVD_event) ~ ",
+        form_sum, "+ age_entry + strata(sex) +
+  ethnicity + smoking + alcohol + fruit_and_veg_cats + oily_fish + red_and_processed_meat_cats + education_cats + TDI_quartiles")
+    ), data = pred_data)
+   
+  
+  
+  # Manual calculation
+  # Make models
+  models <- calc_models_multi_single(
+    var_names = form_vars,
+    data = df_rm,
+    suffix_baseline = "_s0",
+    suffix_rep = c("_s1", "_s2", "_s3", "_s4"),
+    exclusion_indic = "excluded", 
+    covariates =  c("age_entry", "sex", "ethnicity", "smoking", "alcohol", "fruit_and_veg_cats", "oily_fish", "red_and_processed_meat_cats", "education_cats", "TDI_quartiles")
+  )
+  
+  mat <- models$coefficients
+  inverse_mat_relevant <- solve(mat[25:27, ])
+  coef_before <- summary(cox_basic)$coefficients
+  changed_coef <- inverse_mat_relevant %*% coef_before[1:3]
+  
+  # Compare results
+  print(var)
+  print(changed_coef)
+  print(summary(cox_repmeas)$coefficients)
+}
+```
+See green notebook p111 - p112 for proof of why this is so. I think the way it's done is defensible in light of (a) aiming for consistency with earlier analyses (i.e. adjusting for same stuff in main Cox model) and (b) the fact that in regression calibration you can adjust for predictors of X that are not predictors of Y (see Keogh et al, STRATOS document, p24). 
