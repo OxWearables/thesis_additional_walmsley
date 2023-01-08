@@ -11,10 +11,10 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Note location of input files
 ```{r}
-file_loc <- "../../../repeatedMeasurements/R/"
+file_loc <- "../../../Repeated_measurement_error_related/repeatedMeasurements/R/"
 file_loc_local <- "../../useful_functions/"
 input_loc <- "../../../../paperRW2021/"
-input_loc_rm <- "../../../repeatedMeasurementsProcessing/data/59070/"
+input_loc_rm <- "../../../Repeated_measurement_error_related/repeatedMeasurementsProcessing/data/59070/"
 ```
 
 
@@ -490,7 +490,7 @@ colnames(ests) <- paste0(names(rot_list), "_pivot1")
 ids_rm <- df_rm$eid
 df_non_rm <- df[!(df$eid %in% ids_rm), ]
 df_limit <- df[df$eid %in% ids_rm, ]
-df_left <- df_limit[order(match(df_limit$eid, df_non_rm$eid)), ]
+df_left <- df_limit[order(match(df_limit$eid, df_rm$eid)), ] # I believe this was harmlessly wrong previously (harmless as both datasets are already ordered by eid)
 rm(df_limit) # Keep tidy
 
 for (i in 1:n_bootstrap){
@@ -761,13 +761,13 @@ for (var in var_check){
     var1 <- paste0(var1, ".y")
     var2 <- paste0(var2, ".x")
 
-      }
+  }
   
   diff <- dat_temp[, var1] - dat_temp[, var2]
   av <- (dat_temp[, var1] + dat_temp[, var2])/2
   print(cor(dat_temp[, var1], dat_temp[, var2]))
-  print(quantile(abs(diff)))
-  print(quantile(diff))
+  print(quantile(abs(diff))*24)
+  print(quantile(diff)*24)
   print(quantile(abs(diff/av), na.rm = TRUE))
   print(quantile(abs(diff)/sd(dat_temp[, var1]), na.rm = TRUE))
   rm(dat_temp)

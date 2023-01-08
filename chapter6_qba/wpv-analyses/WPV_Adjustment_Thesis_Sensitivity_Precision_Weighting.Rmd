@@ -454,7 +454,7 @@ colnames(ests) <- paste0(names(rot_list), "_pivot1")
 ids_rm <- df_rm$eid
 df_non_rm <- df[!(df$eid %in% ids_rm), ]
 df_limit <- df[df$eid %in% ids_rm, ]
-df_left <- df_limit[order(match(df_limit$eid, df_non_rm$eid)), ]
+df_left <- df_limit[order(match(df_limit$eid, df_rm$eid)), ] # I believe this was harmlessly wrong previously (harmless as both datasets are already ordered by eid)
 rm(df_limit) # Keep tidy
 
 for (i in 1:n_bootstrap){
